@@ -1,0 +1,41 @@
+language: python
+python:
+- '2.7'
+- '3.3'
+- '3.4'
+- '3.5'
+- '3.6'
+install:
+- pip install -e .
+- pip install pytest pytest-cov coveralls
+env:
+- TEST_ENV=travis
+script:
+- travis_wait 50 py.test
+before_install:
+- openssl aes-256-cbc -K $encrypted_ad73325f33e8_key -iv $encrypted_ad73325f33e8_iv
+  -in travis.tar.enc -out travis.tar -d
+- tar xvf travis.tar
+- mkdir -p ~/mdf/credentials/
+- mv MDF_Forge_tokens.json ~/mdf/credentials/MDF_Forge_tokens.json
+after_success:
+- coveralls
+notifications:
+  email:
+    recipients:
+    - jgaff@uchicago.edu
+    on_success: never
+    on_failure: always
+  slack:
+    on_success: always
+    on_failure: always
+    rooms:
+      secure: PeTw4hgPe/UvQXjmYD7tT+4J1tOZKOHw5sLYegSZtnekKeLpjLZib0eZrAkzE5LFbRoRgXZ9z4Yn+hN3az4Z1GodXYcRrYrvRwe75oZMgxe5TvXpmE1lqv8nCvbDo2LJbkVTdn0fKRRfEl1W62RtYcyh+QwunUudHA9U2zOZLqSt4BeYMTOK4T5XyhZ5T1DYSBO8Dj28OFuemjwGkBMgZ5Z/+GqIJ1wZw2sKHKN+vkKj8NChPEzok+GX0R1CXgqvMMHPNJUx/69hZMuqxZciQICqhAstUw//ssTI6bzGHivbhObE5nlDqmBIPDD8tEG6p/XOOFtHx2a/R6KV+5wjzIs6sLiEz2QAG/qKm20jSHi8j585RqjgpBGC1g0FQ8k75E0oF8ls5unHFnDHPRWnPI0ifZ2qgYIUWdHC6dV4QF06Z1OYRHfOiyiLvuWIlKufKRM6aC84LEXxBS7Lq4MUZ+wKjGVf5EmSeJzYC+NXnBcnkFOx3KnImNDP9JuBwsgrFYRZhpvlwKdmCn1sw+iAuhco+nTKrzq5fK4vglE4zAMr81YgnLrVY3xJrz0G4wbQYvtxcFx84GaV6UiL1hfbuu4aBw3o6kuq5gxEaYg18MvsIZyIbQOpNuqRtQsHknRJSoLPvIEv8Rq6zA2twHI1MJXunjzsc0WaCm2Npt1ZpGk=
+deploy:
+  provider: pypi
+  user: jgaff
+  on:
+    tags: true
+  distributions: sdist bdist_wheel
+  password:
+    secure: Mg/CzENSJVj79FYh1xOxFe95cbwcEhjAj/RM3AmKZ3EZmtuvD1srMXN+qn5KOUrAEB1kaMXJPHN6tchfLo3/PDGfC4w+x+KzpNNROLaOh/ht987OVMYJSvqTXn46GlZda2ydomRBbXPauZugacjVcS0ETknDWokH4tS7x8kX6q32xF5ChXp2MBqHd9VQQDBsUWvLA14ahNhIv3H1HuWR5jGrV8naj0FupaKza9Thldk297+8wN8vVk2RkW08HnWcuqxNgit70AOVnkS6KxHBU5umvCC7B6FHh/WdX5RJXCyrTylPauWvDs9SRKGt8wOsSgrXk06yRdt7KXrSMRewYvMKe2YR2RuwNDMutk4idzRp9GFUBYs0QZt/gEFw9SrRvl3M/lUj6stWtDJ7WuvVoRVUcGI0ZFcq71gk9RuPOm2A/VA9Bt69FTbMWeZ3fphjlJQAxy417s8OEtCbjxCOjUkOBl+/YoUmm2mPseepH/0dwMzhjn3iZSfzTaXKYHybYKwGO1bb5qFuY8BfOA8ypPVe25fzsZCMUoDXiMKC3rM2tgQxI5jIQhSWnbGjdBL/9BwFygPKkDiIWPExZeiK76Z+pFSCq5/5rSAkC2p85ZVQaryGaE42IpbUhfRzT14QO9QiJYM6qTxx2uiDVp48lb09nn4vYd0Z0Jg1NHb8EU0=
