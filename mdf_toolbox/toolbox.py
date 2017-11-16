@@ -96,7 +96,7 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except IOError:
             try:
                 creds = json.loads(credentials)
-            except json.JSONDecodeError:
+            except ValueError:
                 raise ValueError("Credential string unreadable")
     elif type(credentials) is dict:
         creds = credentials
@@ -158,7 +158,9 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         clients["mdf"] = mdf_authorizer
     if "publish" in servs:
         publish_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["publish.api.globus.org"]["refresh_token"],
+                                    all_tokens[("https://auth.globus.org/scopes"
+                                                "/ab24b500-37a2-4bad-ab66-d8232c18e6e5"
+                                                "/publish_api")]["refresh_token"],
                                     native_client)
         clients["publish"] = DataPublicationClient(authorizer=publish_authorizer)
 
@@ -195,7 +197,7 @@ def confidential_login(credentials=None):
         except IOError:
             try:
                 creds = json.loads(credentials)
-            except json.JSONDecodeError:
+            except ValueError:
                 raise ValueError("Credentials unreadable or missing")
     elif type(credentials) is dict:
         creds = credentials
