@@ -69,8 +69,12 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                 os.remove(token_path)
         if os.path.exists(token_path):
             with open(token_path, "r") as tf:
-                tokens = json.load(tf)
-        else:
+                try:
+                    tokens = json.load(tf)
+                except ValueError:
+                    # Tokens corrupted
+                    os.remove(token_path)
+        if not os.path.exists(token_path):
             os.makedirs(DEFAULT_CRED_PATH, exist_ok=True)
             client.oauth2_start_flow(requested_scopes=scopes, refresh_tokens=True)
             authorize_url = client.oauth2_get_authorize_url()
