@@ -1,3 +1,4 @@
+from copy import deepcopy
 import os
 import json
 import pytest
@@ -5,22 +6,51 @@ import globus_sdk
 from mdf_toolbox import toolbox
 
 
+credentials = {
+    "app_name": "MDF_Forge",
+    "services": [],
+    "index": "mdf-test"
+    }
+
+
 ############################
 # Toolbox tests
 ############################
 
-'''
 def test_login():
-error if not credentials in any checked location
-error if app_name, services not in credentials
-error if bad credentials
-assert proper clients returned
-'''
+    # Login works
+    creds1 = deepcopy(credentials)
+    creds1["services"] = ["search"]
+    res1 = toolbox.login(creds1)
+    assert type(res1) is dict
+    assert isinstance(res1.get("search"), toolbox.SearchClient)
 
-'''
+    # Test other services
+    creds2 = deepcopy(credentials)
+    creds2["services"] = ["search_ingest", "publish", "mdf", "transfer"]
+    res2 = toolbox.login(creds2)
+    assert isinstance(res2.get("search_ingest"), toolbox.SearchClient)
+    assert isinstance(res2.get("publish"), toolbox.DataPublicationClient)
+    assert isinstance(res2.get("publish"), globus_sdk.TransferClient)
+    assert isinstance(res2.get("mdf"), globus_sdk.RefreshTokenAuthorizer)
+
+    # Test nothing
+    creds3 = deepcopy(credentials)
+    assert toolbox.login(creds3) == {}
+
+    # Error on bad creds
+    with pytest.raises(ValueError):
+        toolbox.login("nope")
+    with pytest.raises(ValueError):
+        toolbox.login()
+
+    #TODO: Test user input prompt
+
+
 def test_confidential_login():
-same as login
-'''
+    #TODO
+    pass
+
 
 def test_find_files():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
@@ -265,10 +295,23 @@ def test_gmeta_pop():
     assert info_pop == (popped, {'total_query_matches': 22})
 
 
-'''
-get_local_ep
-?
+def test_quick_transfer():
+    #TODO
+    pass
 
-SearchClient?
-'''
+
+def test_get_local_ep():
+    #TODO
+    pass
+
+
+def test_SearchClient():
+    #TODO
+    pass
+
+
+def test_DataPublicationClient():
+    #TODO
+    pass
+
 
