@@ -579,9 +579,8 @@ class SearchClient(BaseClient):
 
     def __init__(self, index, base_url="https://search.api.globus.org/", **kwargs):
         app_name = kwargs.pop('app_name', 'Search Client v0.2')
-        BaseClient.__init__(self, "search", app_name=app_name, **kwargs)
-        # base URL lookup will fail, producing None, set it by hand
-        self.base_url = base_url
+        BaseClient.__init__(self, "search", base_url=base_url,
+                            app_name=app_name, **kwargs)
         self._headers['Content-Type'] = 'application/json'
         self.index = SEARCH_INDEX_UUIDS.get(index.strip().lower()) or index
 
