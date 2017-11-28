@@ -99,6 +99,10 @@ def test_find_files():
     fn3.sort()
     correct3.sort()
     assert fn3 == correct3
+    
+    # Test error
+    with pytest.raises(ValueError):
+        next(toolbox.find_files("/this/is/not/a/valid/path"))
 
 
 def test_uncompress_tree():
@@ -293,6 +297,32 @@ def test_gmeta_pop():
     print(info_pop)
     assert info_pop == (popped, {'total_query_matches': 22})
 
+    # String loading
+    str_gmeta = json.dumps({
+                    "gmeta": [{
+                        "content": [
+                            {"test1": "test1"},
+                            {"test2": "test2"}
+                        ]
+                    },
+                    {
+                        "content": [
+                            {"test3": "test3"},
+                            {"test4": "test4"}
+                        ]
+                    }
+                ]})
+    assert toolbox.gmeta_pop(str_gmeta) == [
+                            {"test1": "test1"},
+                            {"test2": "test2"},
+                            {"test3": "test3"},
+                            {"test4": "test4"}
+                        ]
+
+    # Error on bad data
+    with pytest.raises(TypeError):
+        toolbox.gmeta_pop(1)
+
 
 def test_quick_transfer():
     #TODO
@@ -303,6 +333,59 @@ def test_get_local_ep():
     #TODO
     pass
 
+
+def test_dict_merge():
+    base = {
+        "base_key": "base",
+        "both_key": "base",
+        "level2": {
+            "base_key": "base",
+            "both_key": "base",
+            "level3": {
+                "base_key": "base",
+                "both_key": "base"
+            }
+        }
+    }
+    add = {
+        "both_key": "add",
+        "add_key": "add",
+        "level2": {
+            "both_key": "add",
+            "add_key": "add",
+            "level3": {
+                "both_key": "add",
+                "add_key": "add"
+            }
+        }
+    }
+    merged = {
+        "base_key": "base",
+        "both_key": "base",
+        "add_key": "add",
+        "level2": {
+            "base_key": "base",
+            "both_key": "base",
+            "add_key": "add",
+            "level3": {
+                "base_key": "base",
+                "both_key": "base",
+                "add_key": "add"
+            }
+        }
+    }
+    # Proper use
+    assert toolbox.dict_merge(base, add) == merged
+    assert toolbox.dict_merge({}, {}) == {}
+
+    # Check errors
+    with pytest.raises(TypeError):
+        toolbox.dict_merge(1, {})
+    with pytest.raises(TypeError):
+        toolbox.dict_merge({}, "a")
+    with pytest.raises(TypeError):
+        toolbox.dict_merge([], [])
+ 
 
 def test_SearchClient():
     #TODO

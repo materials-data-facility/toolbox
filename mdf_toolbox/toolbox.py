@@ -304,30 +304,28 @@ def uncompress_tree(root, verbose=False):
              If False, will remain silent unless there is an error.
              Default False.
     """
-    for path, dirs, files in os.walk(root):
-        if verbose:
-            print("\nPath:", path)
-        for single_file in tqdm(files, desc="Uncompressing files", disable= not verbose):
-            abs_path = os.path.join(path, single_file)
-            if tarfile.is_tarfile(abs_path):
-                tar = tarfile.open(abs_path)
-                tar.extractall(path)
-                tar.close()
-            elif zipfile.is_zipfile(abs_path):
-                z = zipfile.ZipFile(abs_path)
-                z.extractall(path)
-                z.close()
-            else:
-                try:
-                    with gzip.open(abs_path) as gz:
-                        file_data = gz.read()
-                        # Opens the absolute path, including filename, for writing
-                        # Does not include the extension (should be .gz or similar)
-                        with open(abs_path.rsplit('.', 1)[0], 'w') as newfile:
-                            newfile.write(str(file_data))
-                # An IOErrorwill occur at gz.read() if the file is not a gzip
-                except IOError:
-                    pass
+    for file_info in tqdm(find_files(root), desc="Uncompressing files", disable= not verbose):
+        dir_path = os.path.abspath(file_info["path"])
+        abs_path = os.path.join(dir_path, file_info["filename"])
+        if tarfile.is_tarfile(abs_path):
+            tar = tarfile.open(abs_path)
+            tar.extractall(dir_path)
+            tar.close()
+        elif zipfile.is_zipfile(abs_path):
+            z = zipfile.ZipFile(abs_path)
+            z.extractall(dir_path)
+            z.close()
+        else:
+            try:
+                with gzip.open(abs_path) as gz:
+                    file_data = gz.read()
+                    # Opens the absolute path, including filename, for writing
+                    # Does not include the extension (should be .gz or similar)
+                    with open(abs_path.rsplit('.', 1)[0], 'w') as newfile:
+                        newfile.write(str(file_data))
+            # An IOErrorwill occur at gz.read() if the file is not a gzip
+            except IOError:
+                pass
 
 
 
@@ -542,6 +540,37 @@ def get_local_ep(transfer_client):
 
 
 ###################################################
+##  Misc utilities
+###################################################
+
+def dict_merge(base, addition):
+    """Merge one dictionary with another, recursively.
+    Fields present in addition will be added to base.
+    No data in base is deleted or overwritten.
+
+    Arguments:
+    base (dict): The dictionary being added to.
+    addition (dict): The dictionary with additional data.
+
+    Returns:
+    dict: The merged base.
+    """
+    if not isinstance(base, dict) or not isinstance(addition, dict):
+        raise TypeError("dict_merge only works with dicts.")
+
+    for key, value in addition.items():
+        # If the value is a dict, need to merge those
+        if isinstance(value, dict):
+            base[key] = dict_merge(base[key], value)
+        # Otherwise, if the key is not in base, add it
+        elif key not in base.keys():
+            base[key] = value
+
+    return base
+
+
+
+###################################################
 ##  Clients
 ###################################################
 
@@ -550,9 +579,8 @@ class SearchClient(BaseClient):
 
     def __init__(self, index, base_url="https://search.api.globus.org/", **kwargs):
         app_name = kwargs.pop('app_name', 'Search Client v0.2')
-        BaseClient.__init__(self, "search", app_name=app_name, **kwargs)
-        # base URL lookup will fail, producing None, set it by hand
-        self.base_url = base_url
+        BaseClient.__init__(self, "search", base_url=base_url,
+                            app_name=app_name, **kwargs)
         self._headers['Content-Type'] = 'application/json'
         self.index = SEARCH_INDEX_UUIDS.get(index.strip().lower()) or index
 
