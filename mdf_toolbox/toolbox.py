@@ -14,25 +14,26 @@ from six import print_
 
 # Will uncomment the UUIDs once Search actually handles them as documented
 SEARCH_INDEX_UUIDS = {
-    "mdf": "mdf", #"d6cc98c3-ff53-4ee2-b22b-c6f945c0d30c",
-    "mdf-test": "mdf-test", #"c082b745-32ac-4ad2-9cde-92393f6e505c",
-    "dlhub": "dlhub", #"847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
-    "dlhub-test": "dlhub-test" #"5c89e0a9-00e5-4171-b415-814fe4d0b8af"
+    "mdf": "mdf",  # "d6cc98c3-ff53-4ee2-b22b-c6f945c0d30c",
+    "mdf-test": "mdf-test",  # "c082b745-32ac-4ad2-9cde-92393f6e505c",
+    "dlhub": "dlhub",  # "847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
+    "dlhub-test": "dlhub-test"  # "5c89e0a9-00e5-4171-b415-814fe4d0b8af"
 }
 AUTH_SCOPES = {
     "transfer": "urn:globus:auth:scope:transfer.api.globus.org:all",
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
     "mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
-          #"urn:globus:auth:scope:api.materialsdatafacility.org:all"
-    "publish": "https://auth.globus.org/scopes/ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"
-               #"urn:globus:auth:scope:publish.api.globus.org:all"
+    # "urn:globus:auth:scope:api.materialsdatafacility.org:all"
+    "publish": ("https://auth.globus.org/scopes/"
+                "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api")
+    # "urn:globus:auth:scope:publish.api.globus.org:all"
 }
 
 
-###################################################
-##  Authentication utilities
-###################################################
+# *************************************************
+# * Authentication utilities
+# *************************************************
 
 def login(credentials=None, clear_old_tokens=False, **kwargs):
     """Login to Globus services
@@ -138,22 +139,21 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
     clients = {}
     if "transfer" in servs:
         transfer_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["transfer.api.globus.org"]["refresh_token"], 
+                                    all_tokens["transfer.api.globus.org"]["refresh_token"],
                                     native_client)
         clients["transfer"] = globus_sdk.TransferClient(authorizer=transfer_authorizer)
     if "search_ingest" in servs:
         ingest_authorizer = globus_sdk.RefreshTokenAuthorizer(
                                     all_tokens["search.api.globus.org"]["refresh_token"],
                                     native_client)
-        clients["search_ingest"] = SearchClient(index=(kwargs.get("index", None) 
-                                                                  or creds["index"]),
-                                                authorizer=ingest_authorizer)
+        clients["search_ingest"] = SearchClient(
+                                        index=(kwargs.get("index", None) or creds["index"]),
+                                        authorizer=ingest_authorizer)
     elif "search" in servs:
         search_authorizer = globus_sdk.RefreshTokenAuthorizer(
                                     all_tokens["search.api.globus.org"]["refresh_token"],
                                     native_client)
-        clients["search"] = SearchClient(index=(kwargs.get("index", None)
-                                                           or creds["index"]),
+        clients["search"] = SearchClient(index=(kwargs.get("index", None) or creds["index"]),
                                          authorizer=search_authorizer)
     if "mdf" in servs:
         mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
@@ -238,12 +238,12 @@ def confidential_login(credentials=None):
                                                 scopes=AUTH_SCOPES["transfer"]))
     if "search_ingest" in servs:
         clients["search_ingest"] = SearchClient(index=creds["index"],
-                                    authorizer=globus_sdk.ClientCredentialsAuthorizer(
+                                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                                     conf_client,
                                                     scopes=AUTH_SCOPES["search_ingest"]))
     elif "search" in servs:
         clients["search"] = SearchClient(index=creds["index"],
-                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
+                                         authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                                 conf_client,
                                                 scopes=AUTH_SCOPES["search"]))
     if "mdf" in servs:
@@ -256,10 +256,9 @@ def confidential_login(credentials=None):
     return clients
 
 
-
-###################################################
-##  File utilities
-###################################################
+# *************************************************
+# * File utilities
+# *************************************************
 
 def find_files(root, file_pattern=None, verbose=False):
     """Find files recursively in a given directory.
@@ -284,7 +283,7 @@ def find_files(root, file_pattern=None, verbose=False):
         raise ValueError("Path '" + root + "' does not exist.")
     # Add separator to end of root if not already supplied
     root += os.sep if root[-1:] != os.sep else ""
-    for path, dirs, files in tqdm(os.walk(root), desc="Finding files", disable= not verbose):
+    for path, dirs, files in tqdm(os.walk(root), desc="Finding files", disable=(not verbose)):
         for one_file in files:
             if not file_pattern or re.search(file_pattern, one_file):
                 yield {
@@ -304,7 +303,7 @@ def uncompress_tree(root, verbose=False):
              If False, will remain silent unless there is an error.
              Default False.
     """
-    for file_info in tqdm(find_files(root), desc="Uncompressing files", disable= not verbose):
+    for file_info in tqdm(find_files(root), desc="Uncompressing files", disable=(not verbose)):
         dir_path = os.path.abspath(file_info["path"])
         abs_path = os.path.join(dir_path, file_info["filename"])
         if tarfile.is_tarfile(abs_path):
@@ -328,10 +327,9 @@ def uncompress_tree(root, verbose=False):
                 pass
 
 
-
-###################################################
-##  GMeta formatting utilities
-###################################################
+# *************************************************
+# * GMeta formatting utilities
+# *************************************************
 
 def format_gmeta(data):
     """Format input into GMeta format, suitable for ingesting into Globus Search.
@@ -383,7 +381,7 @@ def format_gmeta(data):
 
 def gmeta_pop(gmeta, info=False):
     """Remove GMeta wrapping from a Globus Search result.
-    This function can be called on the raw GlobusHTTPResponse that Search returns, 
+    This function can be called on the raw GlobusHTTPResponse that Search returns,
         or a string or dictionary representation of it.
 
     Arguments:
@@ -416,10 +414,9 @@ def gmeta_pop(gmeta, info=False):
         return results
 
 
-
-###################################################
-##  Globus utilities
-###################################################
+# *************************************************
+# * Globus utilities
+# *************************************************
 
 def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None):
     """Perform a Globus Transfer and monitor for success.
@@ -491,26 +488,37 @@ def get_local_ep(transfer_client):
     """
     pgr_res = transfer_client.endpoint_search(filter_scope="my-endpoints")
     ep_candidates = pgr_res.data
-    if len(ep_candidates) < 1:  # Nothing found
+    # Check nuber of candidates
+    if len(ep_candidates) < 1:
+        # Nothing found
         raise globus_sdk.GlobusError("Error: No local endpoints found")
-    elif len(ep_candidates) == 1:  # Exactly one candidate
-        if ep_candidates[0]["gcp_connected"] == False:  # Is GCP, is not on
+    elif len(ep_candidates) == 1:
+        # Exactly one candidate
+        if not ep_candidates[0]["gcp_connected"]:
+            # Is GCP, is not on
             raise globus_sdk.GlobusError("Error: Globus Connect is not running")
-        else:  # Is GCServer or GCP and connected
+        else:
+            # Is GCServer or GCP and connected
             return ep_candidates[0]["id"]
-    else: # >1 found
-        #Filter out disconnected GCP
-        ep_connections = [candidate for candidate in ep_candidates 
-                            if candidate["gcp_connected"] is not False]
-        #Recheck list
-        if len(ep_connections) < 1:  # Nothing found
+    else:
+        # >1 found
+        # Filter out disconnected GCP
+        ep_connections = [candidate for candidate in ep_candidates
+                          if candidate["gcp_connected"] is not False]
+        # Recheck list
+        if len(ep_connections) < 1:
+            # Nothing found
             raise globus_sdk.GlobusError("Error: No local endpoints running")
-        elif len(ep_connections) == 1:  # Exactly one candidate
-            if ep_connections[0]["gcp_connected"] == False:  # Is GCP, is not on
+        elif len(ep_connections) == 1:
+            # Exactly one candidate
+            if not ep_connections[0]["gcp_connected"]:
+                # Is GCP, is not on
                 raise globus_sdk.GlobusError("Error: Globus Connect is not active")
-            else:  # Is GCServer or GCP and connected
+            else:
+                # Is GCServer or GCP and connected
                 return ep_connections[0]["id"]
-        else:  # >1 found
+        else:
+            # Still >1 found
             # Prompt user
             print_("Multiple endpoints found:")
             count = 0
@@ -523,13 +531,16 @@ def get_local_ep(transfer_client):
                 usr_choice = input("Enter the number of the correct endpoint (-1 to cancel): ")
                 try:
                     ep_choice = int(usr_choice)
-                    if ep_choice == -1:  # User wants to quit
-                        ep_num = -1  # Will break out of while to exit program
-                    elif ep_choice in range(1, count+1):  # Valid selection
-                        ep_num = ep_choice  # Break out of while, return valid ID
-                    else:  # Invalid number
+                    if ep_choice == -1:
+                        # User wants to quit
+                        ep_num = -1
+                    elif ep_choice in range(1, count+1):
+                        # Valid selection
+                        ep_num = ep_choice
+                    else:
+                        # Invalid number
                         print_("Invalid selection")
-                except:
+                except Exception:
                     print_("Invalid input")
 
             if ep_num == -1:
@@ -538,10 +549,9 @@ def get_local_ep(transfer_client):
             return ep_connections[ep_num-1]["id"]
 
 
-
-###################################################
-##  Misc utilities
-###################################################
+# *************************************************
+# * Misc utilities
+# *************************************************
 
 def dict_merge(base, addition):
     """Merge one dictionary with another, recursively.
@@ -569,10 +579,9 @@ def dict_merge(base, addition):
     return base
 
 
-
-###################################################
-##  Clients
-###################################################
+# *************************************************
+# * Clients
+# *************************************************
 
 class SearchClient(BaseClient):
     """Access (search and ingest) Globus Search."""
@@ -721,4 +730,3 @@ class DataPublicationClient(BaseClient):
 
     def list_submissions(self, **params):
         return self.get('submissions', params=params)
-
