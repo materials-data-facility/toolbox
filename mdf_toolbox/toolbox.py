@@ -571,7 +571,7 @@ def dict_merge(base, addition):
     for key, value in addition.items():
         # If the value is a dict, need to merge those
         if isinstance(value, dict):
-            base[key] = dict_merge(base[key], value)
+            base[key] = dict_merge(base.get(key, {}), value)
         # Otherwise, if the key is not in base, add it
         elif key not in base.keys():
             base[key] = value
@@ -686,10 +686,8 @@ class DataPublicationClient(BaseClient):
 
     def __init__(self, base_url="https://publish.globus.org/v1/api/", **kwargs):
         app_name = kwargs.pop('app_name', 'DataPublication Client v0.1')
-        BaseClient.__init__(self, "datapublication",
+        BaseClient.__init__(self, "datapublication", base_url=base_url,
                             app_name=app_name, **kwargs)
-        # base URL lookup will fail, producing None, set it by hand
-        self.base_url = base_url
         self._headers['Content-Type'] = 'application/json'
 
     def list_schemas(self, **params):

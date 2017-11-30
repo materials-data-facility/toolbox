@@ -352,7 +352,10 @@ def test_dict_merge():
             "add_key": "add",
             "level3": {
                 "both_key": "add",
-                "add_key": "add"
+                "add_key": "add",
+                "level4": {
+                    "add_key": "add"
+                }
             }
         }
     }
@@ -367,7 +370,10 @@ def test_dict_merge():
             "level3": {
                 "base_key": "base",
                 "both_key": "base",
-                "add_key": "add"
+                "add_key": "add",
+                "level4": {
+                    "add_key": "add"
+                }
             }
         }
     }
