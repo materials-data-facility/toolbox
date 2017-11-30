@@ -13,10 +13,6 @@ credentials = {
     }
 
 
-############################
-# Toolbox tests
-############################
-
 def test_login():
     # Login works
     creds1 = deepcopy(credentials)
@@ -43,11 +39,11 @@ def test_login():
     with pytest.raises(ValueError):
         toolbox.login()
 
-    #TODO: Test user input prompt
+    # TODO: Test user input prompt
 
 
 def test_confidential_login():
-    #TODO
+    # TODO
     pass
 
 
@@ -99,7 +95,7 @@ def test_find_files():
     fn3.sort()
     correct3.sort()
     assert fn3 == correct3
-    
+
     # Test error
     with pytest.raises(ValueError):
         next(toolbox.find_files("/this/is/not/a/valid/path"))
@@ -126,29 +122,29 @@ def test_format_gmeta():
     # More complex GMetaEntry
     md2 = {
         "mdf": {
-                "title":"test",
-                "acl":["public"],
-                "source_name":"source name",
-                "citation":["abc"],
+                "title": "test",
+                "acl": ["public"],
+                "source_name": "source name",
+                "citation": ["abc"],
                 "links": {
-                    "landing_page":"http://www.globus.org"
+                    "landing_page": "http://www.globus.org"
                 },
-                "data_contact":{
+                "data_contact": {
                     "given_name": "Test",
                     "family_name": "McTesterson",
                     "full_name": "Test McTesterson",
                     "email": "test@example.com"
                 },
-                "data_contributor":[{
+                "data_contributor": [{
                     "given_name": "Test",
                     "family_name": "McTesterson",
                     "full_name": "Test McTesterson",
                     "email": "test@example.com"
                 }],
-                "ingest_date":"Jan 1, 2017",
-                "metadata_version":"1.1",
-                "mdf_id":"1",
-                "resource_type":"dataset"
+                "ingest_date": "Jan 1, 2017",
+                "metadata_version": "1.1",
+                "mdf_id": "1",
+                "resource_type": "dataset"
         },
         "dc": {},
         "misc": {}
@@ -163,9 +159,9 @@ def test_format_gmeta():
             "visible_to": ["public"],
             "content": {
                 "mdf": {
-                "links": {
-                    "landing_page": "https://example.com"
-                    }
+                    "links": {
+                        "landing_page": "https://example.com"
+                        }
                 }
             }
         }
@@ -177,31 +173,31 @@ def test_format_gmeta():
             "visible_to": ["public"],
             "content": {
                 "mdf": {
-                    "title":"test",
-                    "source_name":"source name",
-                    "citation":["abc"],
+                    "title": "test",
+                    "source_name": "source name",
+                    "citation": ["abc"],
                     "links": {
-                        "landing_page":"http://www.globus.org"
+                        "landing_page": "http://www.globus.org"
                     },
-                    "data_contact":{
+                    "data_contact": {
                         "given_name": "Test",
                         "family_name": "McTesterson",
                         "full_name": "Test McTesterson",
                         "email": "test@example.com"
                     },
-                    "data_contributor":[{
+                    "data_contributor": [{
                         "given_name": "Test",
                         "family_name": "McTesterson",
                         "full_name": "Test McTesterson",
                         "email": "test@example.com"
                     }],
-                    "ingest_date":"Jan 1, 2017",
-                    "metadata_version":"1.1",
-                    "mdf_id":"1",
-                    "resource_type":"dataset"
+                    "ingest_date": "Jan 1, 2017",
+                    "metadata_version": "1.1",
+                    "mdf_id": "1",
+                    "resource_type": "dataset"
                 },
-            "dc": {},
-            "misc": {}
+                "dc": {},
+                "misc": {}
             }
         }
     # Format into GMetaList
@@ -238,7 +234,7 @@ def test_gmeta_pop():
                 'content': [{
                     'mdf': {
                         'links': {
-                            'landing_page':\
+                            'landing_page':
                                 'https://data.materialsdatafacility.org/test/test_fetch.txt',
                             'txt': {
                                 "globus_endpoint": "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec",
@@ -247,10 +243,10 @@ def test_gmeta_pop():
                                 }
                             }
                         }
-                    },{
+                    }, {
                     'mdf': {
                         'links': {
-                            'landing_page':\
+                            'landing_page':
                                 'https://data.materialsdatafacility.org/test/test_fetch.txt',
                             'txt': {
                                 "globus_endpoint": "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec",
@@ -266,6 +262,7 @@ def test_gmeta_pop():
             'total': 22
             }
         text = json.dumps(data)
+
         def json(self):
             return self.data
     ghttp = globus_sdk.GlobusHTTPResponse(TestResponse())
@@ -305,13 +302,13 @@ def test_gmeta_pop():
                             {"test2": "test2"}
                         ]
                     },
-                    {
+                        {
                         "content": [
                             {"test3": "test3"},
                             {"test4": "test4"}
                         ]
                     }
-                ]})
+                    ]})
     assert toolbox.gmeta_pop(str_gmeta) == [
                             {"test1": "test1"},
                             {"test2": "test2"},
@@ -325,12 +322,12 @@ def test_gmeta_pop():
 
 
 def test_quick_transfer():
-    #TODO
+    # TODO
     pass
 
 
 def test_get_local_ep():
-    #TODO
+    # TODO
     pass
 
 
@@ -355,7 +352,10 @@ def test_dict_merge():
             "add_key": "add",
             "level3": {
                 "both_key": "add",
-                "add_key": "add"
+                "add_key": "add",
+                "level4": {
+                    "add_key": "add"
+                }
             }
         }
     }
@@ -370,7 +370,10 @@ def test_dict_merge():
             "level3": {
                 "base_key": "base",
                 "both_key": "base",
-                "add_key": "add"
+                "add_key": "add",
+                "level4": {
+                    "add_key": "add"
+                }
             }
         }
     }
@@ -385,15 +388,13 @@ def test_dict_merge():
         toolbox.dict_merge({}, "a")
     with pytest.raises(TypeError):
         toolbox.dict_merge([], [])
- 
+
 
 def test_SearchClient():
-    #TODO
+    # TODO
     pass
 
 
 def test_DataPublicationClient():
-    #TODO
+    # TODO
     pass
-
-
