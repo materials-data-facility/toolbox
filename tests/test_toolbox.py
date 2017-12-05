@@ -114,9 +114,7 @@ def test_format_gmeta():
     md1 = {
         "mdf": {
             "acl": ["public"],
-            "links": {
-                "landing_page": "https://example.com"
-                }
+            "landing_page": "https://example.com"
             }
         }
     # More complex GMetaEntry
@@ -126,9 +124,7 @@ def test_format_gmeta():
                 "acl": ["public"],
                 "source_name": "source name",
                 "citation": ["abc"],
-                "links": {
-                    "landing_page": "http://www.globus.org"
-                },
+                "landing_page": "http://www.globus.org",
                 "data_contact": {
                     "given_name": "Test",
                     "family_name": "McTesterson",
@@ -159,9 +155,7 @@ def test_format_gmeta():
             "visible_to": ["public"],
             "content": {
                 "mdf": {
-                    "links": {
-                        "landing_page": "https://example.com"
-                        }
+                    "landing_page": "https://example.com"
                 }
             }
         }
@@ -176,9 +170,7 @@ def test_format_gmeta():
                     "title": "test",
                     "source_name": "source name",
                     "citation": ["abc"],
-                    "links": {
-                        "landing_page": "http://www.globus.org"
-                    },
+                    "landing_page": "http://www.globus.org",
                     "data_contact": {
                         "given_name": "Test",
                         "family_name": "McTesterson",
