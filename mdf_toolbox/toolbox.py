@@ -2,6 +2,7 @@ import gzip
 import json
 import os
 import re
+import sys
 import tarfile
 import zipfile
 
@@ -72,6 +73,28 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
             with open(token_path, "r") as tf:
                 try:
                     tokens = json.load(tf)
+                    # Check that requested scopes are present
+                    # :all scopes should override any scopes with lesser permissions
+                    # Some scopes are returned in multiples and should be separated
+                    existing_scopes = []
+                    for sc in [val["scope"] for val in tokens.values()]:
+                        if " " in sc:
+                            existing_scopes += sc.split(" ")
+                        else:
+                            existing_scopes.append(sc)
+                    permissive_scopes = [scope.replace(":all", "")
+                                         for scope in existing_scopes
+                                         if scope.endswith(":all")]
+                    missing_scopes = [scope for scope in scopes.split(" ")
+                                      if scope not in existing_scopes
+                                      and not any([scope.startswith(per_sc)
+                                                   for per_sc in permissive_scopes])
+                                      and not scope.strip() == ""]
+                    # If some scopes are missing, regenerate tokens
+                    # Get tokens for existing scopes and new scopes
+                    if len(missing_scopes) > 0:
+                        scopes = " ".join(existing_scopes + missing_scopes)
+                        os.remove(token_path)
                 except ValueError:
                     # Tokens corrupted
                     os.remove(token_path)
@@ -80,17 +103,26 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
             client.oauth2_start_flow(requested_scopes=scopes, refresh_tokens=True)
             authorize_url = client.oauth2_get_authorize_url()
 
-            print_("It looks like this is the first time you're accessing this client.",
+            print_("It looks like this is the first time you're accessing this service.",
                    "\nPlease log in to Globus at this link:\n", authorize_url)
             auth_code = input("Copy and paste the authorization code here: ").strip()
-            print_("Thanks!")
 
-            token_response = client.oauth2_exchange_code_for_tokens(auth_code)
+            # Handle 401s
+            try:
+                token_response = client.oauth2_exchange_code_for_tokens(auth_code)
+            except globus_sdk.GlobusAPIError as e:
+                if e.http_status == 401:
+                    print_("\nSorry, that code isn't valid."
+                           " You can try again, or contact support.")
+                    sys.exit(1)
+                else:
+                    raise
             tokens = token_response.by_resource_server
 
             os.umask(0o077)
             with open(token_path, "w") as tf:
                 json.dump(tokens, tf)
+            print_("Thanks! You're now logged in.")
 
         return tokens
 
@@ -121,8 +153,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                                  + DEFAULT_CRED_PATH
                                  + "'.")
 
-    native_client = (globus_sdk.NativeAppAuthClient(creds.get("client_id")
-                     or NATIVE_CLIENT_ID, app_name=creds["app_name"]))
+    native_client = (globus_sdk.NativeAppAuthClient(creds.get("client_id", NATIVE_CLIENT_ID),
+                                                    app_name=creds.get("app_name", "unknown")))
 
     servs = []
     for serv in creds.get("services", []):
@@ -133,40 +165,93 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
             servs += list(serv)
     scopes = " ".join([AUTH_SCOPES[sc] for sc in servs])
 
-    all_tokens = _get_tokens(native_client, scopes, creds["app_name"],
+    all_tokens = _get_tokens(native_client, scopes, creds.get("app_name", "unknown"),
                              force_refresh=clear_old_tokens)
 
     clients = {}
     if "transfer" in servs:
-        transfer_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["transfer.api.globus.org"]["refresh_token"],
-                                    native_client)
-        clients["transfer"] = globus_sdk.TransferClient(authorizer=transfer_authorizer)
+        try:
+            transfer_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                        all_tokens["transfer.api.globus.org"]["refresh_token"],
+                                        native_client)
+            clients["transfer"] = globus_sdk.TransferClient(authorizer=transfer_authorizer)
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve Transfer tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["transfer"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create Transfer client (" + e.message + ").")
+            clients["transfer"] = None
+
     if "search_ingest" in servs:
-        ingest_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["search.api.globus.org"]["refresh_token"],
-                                    native_client)
-        clients["search_ingest"] = SearchClient(
-                                        index=(kwargs.get("index", None) or creds["index"]),
-                                        authorizer=ingest_authorizer)
+        try:
+            ingest_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                        all_tokens["search.api.globus.org"]["refresh_token"],
+                                        native_client)
+            clients["search_ingest"] = SearchClient(
+                                            index=(kwargs.get("index", None) or creds["index"]),
+                                            authorizer=ingest_authorizer)
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve Search (ingest) tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["search_ingest"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create Search (ingest) client (" + e.message + ").")
+            clients["search_ingest"] = None
     elif "search" in servs:
-        search_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["search.api.globus.org"]["refresh_token"],
-                                    native_client)
-        clients["search"] = SearchClient(index=(kwargs.get("index", None) or creds["index"]),
-                                         authorizer=search_authorizer)
+        try:
+            search_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                        all_tokens["search.api.globus.org"]["refresh_token"],
+                                        native_client)
+            clients["search"] = SearchClient(index=(kwargs.get("index", None) or creds["index"]),
+                                             authorizer=search_authorizer)
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve Search tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["search"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create Search client (" + e.message + ").")
+            clients["search"] = None
+
     if "mdf" in servs:
-        mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                all_tokens["data.materialsdatafacility.org"]["refresh_token"],
-                                native_client)
-        clients["mdf"] = mdf_authorizer
-    if "publish" in servs:
-        publish_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens[("https://auth.globus.org/scopes"
-                                                "/ab24b500-37a2-4bad-ab66-d8232c18e6e5"
-                                                "/publish_api")]["refresh_token"],
+        try:
+            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                    all_tokens["data.materialsdatafacility.org"]["refresh_token"],
                                     native_client)
-        clients["publish"] = DataPublicationClient(authorizer=publish_authorizer)
+            clients["mdf"] = mdf_authorizer
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve MDF tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["mdf"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create MDF Authorizer (" + e.message + ").")
+            clients["mdf"] = None
+
+    if "publish" in servs:
+        try:
+            publish_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                        all_tokens[("https://auth.globus.org/scopes"
+                                                    "/ab24b500-37a2-4bad-ab66-d8232c18e6e5"
+                                                    "/publish_api")]["refresh_token"],
+                                        native_client)
+            clients["publish"] = DataPublicationClient(authorizer=publish_authorizer)
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve Publish tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["publish"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create Publish client (" + e.message + ").")
+            clients["publish"] = None
 
     return clients
 
@@ -346,7 +431,7 @@ def format_gmeta(data):
     Arguments:
     data (dict or list): The data to be formatted.
         If data is a dict, it must contain:
-        data["mdf"]["links"]["landing_page"] (str): A URI to a web page for the entry.
+        data["mdf"]["landing_page"] (str): A URI to a web page for the entry.
         data["mdf"]["acl"] (list of str): A list of Globus UUIDs that are allowed to view the entry.
         If data is a list, it must consist of GMetaEntry documents.
 
@@ -358,7 +443,7 @@ def format_gmeta(data):
         return {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": data["mdf"]["links"]["landing_page"],
+            "subject": data["mdf"]["landing_page"],
             "visible_to": data["mdf"].pop("acl"),
             "content": data
             }
@@ -488,7 +573,7 @@ def get_local_ep(transfer_client):
     """
     pgr_res = transfer_client.endpoint_search(filter_scope="my-endpoints")
     ep_candidates = pgr_res.data
-    # Check nuber of candidates
+    # Check number of candidates
     if len(ep_candidates) < 1:
         # Nothing found
         raise globus_sdk.GlobusError("Error: No local endpoints found")
