@@ -11,8 +11,7 @@ install:
 env:
 - TEST_ENV=travis
 script:
-- flake8 .
-- travis_wait 50 py.test
+- flake8 . && travis_wait 50 py.test
 before_install:
 - openssl aes-256-cbc -K $encrypted_ad73325f33e8_key -iv $encrypted_ad73325f33e8_iv
   -in travis.tar.enc -out travis.tar -d
