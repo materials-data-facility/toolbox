@@ -153,8 +153,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                                  + DEFAULT_CRED_PATH
                                  + "'.")
 
-    native_client = (globus_sdk.NativeAppAuthClient(creds.get("client_id", NATIVE_CLIENT_ID),
-                                                    app_name=creds.get("app_name", "unknown")))
+    native_client = globus_sdk.NativeAppAuthClient(creds.get("client_id", NATIVE_CLIENT_ID),
+                                                    app_name=creds.get("app_name", "unknown"))
 
     servs = []
     for serv in creds.get("services", []):
@@ -238,9 +238,7 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
     if "publish" in servs:
         try:
             publish_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                        all_tokens[("https://auth.globus.org/scopes"
-                                                    "/ab24b500-37a2-4bad-ab66-d8232c18e6e5"
-                                                    "/publish_api")]["refresh_token"],
+                                        all_tokens["publish.api.globus.org"]["refresh_token"],
                                         native_client)
             clients["publish"] = DataPublicationClient(authorizer=publish_authorizer)
         # Token not present
