@@ -154,7 +154,7 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                                  + "'.")
 
     native_client = globus_sdk.NativeAppAuthClient(creds.get("client_id", NATIVE_CLIENT_ID),
-                                                    app_name=creds.get("app_name", "unknown"))
+                                                   app_name=creds.get("app_name", "unknown"))
 
     servs = []
     for serv in creds.get("services", []):
