@@ -13,7 +13,7 @@ credentials = {
     }
 
 
-def test_login():
+def test_login(capsys):
     # Login works
     creds1 = deepcopy(credentials)
     creds1["services"] = ["search"]
@@ -39,12 +39,44 @@ def test_login():
     with pytest.raises(ValueError):
         toolbox.login()
 
+    # Error on bad services
+    creds4 = deepcopy(credentials)
+    creds4["services"] = ["garbage", "invalid"]
+    assert toolbox.login(creds4) == {}
+    out, err = capsys.readouterr()
+    assert "Unknown or invalid service: 'garbage'." in out
+    assert "Unknown or invalid service: 'invalid'." in out
+
     # TODO: Test user input prompt
 
 
 def test_confidential_login():
     # TODO
     pass
+
+
+def test_anonymous_login(capsys):
+    # Valid services work
+    res1 = toolbox.anonymous_login(["transfer", "search", "publish"])
+    assert isinstance(res1.get("search"), toolbox.SearchClient)
+    assert isinstance(res1.get("transfer"), globus_sdk.TransferClient)
+    assert isinstance(res1.get("publish"), toolbox.DataPublicationClient)
+
+    # Single service works
+    res2 = toolbox.anonymous_login("search")
+    assert isinstance(res2.get("search"), toolbox.SearchClient)
+
+    # Auth-only services don't work
+    assert toolbox.anonymous_login(["search_ingest", "mdf"]) == {}
+    out, err = capsys.readouterr()
+    assert "Error: Service 'search_ingest' requires authentication." in out
+    assert "Error: Service 'mdf' requires authentication." in out
+
+    # Bad services don't work
+    assert toolbox.anonymous_login(["garbage", "invalid"]) == {}
+    out, err = capsys.readouterr()
+    assert "Unknown or invalid service: 'garbage'." in out
+    assert "Unknown or invalid service: 'invalid'." in out
 
 
 def test_find_files():

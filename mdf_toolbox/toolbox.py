@@ -163,7 +163,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
             servs += serv.split(" ")
         else:
             servs += list(serv)
-    scopes = " ".join([AUTH_SCOPES[sc] for sc in servs])
+    # Translate services into scopes, pass bad/unknown services
+    scopes = " ".join([AUTH_SCOPES.get(sc, "") for sc in servs])
 
     all_tokens = _get_tokens(native_client, scopes, creds.get("app_name", "unknown"),
                              force_refresh=clear_old_tokens)
@@ -184,6 +185,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Transfer client (" + e.message + ").")
             clients["transfer"] = None
+        # Remove processed service
+        servs.remove("transfer")
 
     if "search_ingest" in servs:
         try:
@@ -202,6 +205,14 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Search (ingest) client (" + e.message + ").")
             clients["search_ingest"] = None
+        # Remove processed service
+        servs.remove("search_ingest")
+        # And redundant service
+        try:
+            servs.remove("search")
+        # No issue if it isn't there
+        except Exception:
+            pass
     elif "search" in servs:
         try:
             search_authorizer = globus_sdk.RefreshTokenAuthorizer(
@@ -218,6 +229,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Search client (" + e.message + ").")
             clients["search"] = None
+        # Remove processed service
+        servs.remove("search")
 
     if "mdf" in servs:
         try:
@@ -234,6 +247,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create MDF Authorizer (" + e.message + ").")
             clients["mdf"] = None
+        # Remove processed service
+        servs.remove("mdf")
 
     if "publish" in servs:
         try:
@@ -250,6 +265,12 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Publish client (" + e.message + ").")
             clients["publish"] = None
+        # Remove processed service
+        servs.remove("publish")
+
+    # Warn of invalid services
+    if servs:
+        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
 
     return clients
 
@@ -271,7 +292,7 @@ def confidential_login(credentials=None):
 
     Returns:
     dict: The clients and authorizers requested, indexed by service name.
-          For example, if login() is told to auth with 'search'
+          For example, if confidential_login() is told to auth with 'search'
             then the search client will be in the 'search' field.
     """
     DEFAULT_CRED_FILENAME = "confidential_globus_login.json"
@@ -319,23 +340,92 @@ def confidential_login(credentials=None):
                                 authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                                 conf_client,
                                                 scopes=AUTH_SCOPES["transfer"]))
+        # Remove processed service
+        servs.remove("transfer")
+
     if "search_ingest" in servs:
         clients["search_ingest"] = SearchClient(index=creds["index"],
                                                 authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                                     conf_client,
                                                     scopes=AUTH_SCOPES["search_ingest"]))
+        # Remove processed service
+        servs.remove("search_ingest")
+        # And redundant service
+        try:
+            servs.remove("search")
+        # No issue if it isn't there
+        except Exception:
+            pass
     elif "search" in servs:
         clients["search"] = SearchClient(index=creds["index"],
                                          authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                                 conf_client,
                                                 scopes=AUTH_SCOPES["search"]))
+        # Remove processed service
+        servs.remove("search")
+
     if "mdf" in servs:
         clients["mdf"] = globus_sdk.ClientCredentialsAuthorizer(
                                 conf_client, scopes=AUTH_SCOPES["mdf"])
+        # Remove processed service
+        servs.remove("mdf")
+
     if "publish" in servs:
         clients["publish"] = DataPublicationClient(
                                 authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                                 conf_client, scopes=AUTH_SCOPES["publish"]))
+        # Remove processed service
+        servs.remove("publish")
+
+    # Warn of invalid services
+    if servs:
+        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
+
+    return clients
+
+
+def anonymous_login(services):
+    """Initialize services without authenticating to Globus Auth.
+
+    Arguments:
+    services (str or list of str): The services to initialize clients for.
+                                   Note that not all services support unauthenticated clients.
+
+    Returns:
+    dict: The clients requested, indexed by service name.
+          For example, if anonymous_login() is told to auth with 'search'
+            then the search client will be in the 'search' field.
+    """
+    if isinstance(services, str):
+        services = [services]
+
+    clients = {}
+    # Initialize valid services
+    if "transfer" in services:
+        clients["transfer"] = globus_sdk.TransferClient()
+        services.remove("transfer")
+
+    if "search" in services:
+        clients["search"] = SearchClient()
+        services.remove("search")
+
+    if "publish" in services:
+        clients["publish"] = DataPublicationClient()
+        services.remove("publish")
+
+    # Notify user of auth-only services
+    if "search_ingest" in services:
+        print_("Error: Service 'search_ingest' requires authentication.")
+        services.remove("search_ingest")
+
+    if "mdf" in services:
+        print_("Error: Service 'mdf' requires authentication.")
+        services.remove("mdf")
+
+    # Warn of invalid services
+    if services:
+        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in services]))
+
     return clients
 
 
@@ -669,7 +759,7 @@ def dict_merge(base, addition):
 class SearchClient(BaseClient):
     """Access (search and ingest) Globus Search."""
 
-    def __init__(self, index, base_url="https://search.api.globus.org/", **kwargs):
+    def __init__(self, index="mdf", base_url="https://search.api.globus.org/", **kwargs):
         app_name = kwargs.pop('app_name', 'Search Client v0.2')
         BaseClient.__init__(self, "search", base_url=base_url,
                             app_name=app_name, **kwargs)
