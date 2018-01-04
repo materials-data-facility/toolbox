@@ -8,8 +8,7 @@ from mdf_toolbox import toolbox
 
 credentials = {
     "app_name": "MDF_Forge",
-    "services": [],
-    "index": "mdf-test"
+    "services": []
     }
 
 
@@ -19,13 +18,13 @@ def test_login(capsys):
     creds1["services"] = ["search"]
     res1 = toolbox.login(creds1)
     assert type(res1) is dict
-    assert isinstance(res1.get("search"), toolbox.SearchClient)
+    assert isinstance(res1.get("search"), globus_sdk.SearchClient)
 
     # Test other services
     creds2 = deepcopy(credentials)
     creds2["services"] = ["search_ingest", "mdf", "transfer"]
     res2 = toolbox.login(creds2)
-    assert isinstance(res2.get("search_ingest"), toolbox.SearchClient)
+    assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res2.get("mdf"), globus_sdk.RefreshTokenAuthorizer)
 
@@ -58,13 +57,13 @@ def test_confidential_login():
 def test_anonymous_login(capsys):
     # Valid services work
     res1 = toolbox.anonymous_login(["transfer", "search", "publish"])
-    assert isinstance(res1.get("search"), toolbox.SearchClient)
+    assert isinstance(res1.get("search"), globus_sdk.SearchClient)
     assert isinstance(res1.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res1.get("publish"), toolbox.DataPublicationClient)
 
     # Single service works
     res2 = toolbox.anonymous_login("search")
-    assert isinstance(res2.get("search"), toolbox.SearchClient)
+    assert isinstance(res2.get("search"), globus_sdk.SearchClient)
 
     # Auth-only services don't work
     assert toolbox.anonymous_login(["search_ingest", "mdf"]) == {}
@@ -412,11 +411,6 @@ def test_dict_merge():
         toolbox.dict_merge({}, "a")
     with pytest.raises(TypeError):
         toolbox.dict_merge([], [])
-
-
-def test_SearchClient():
-    # TODO
-    pass
 
 
 def test_DataPublicationClient():
