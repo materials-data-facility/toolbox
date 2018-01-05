@@ -7,19 +7,12 @@ import tarfile
 import zipfile
 
 import globus_sdk
-from globus_sdk.base import BaseClient, merge_params, slash_join
+from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
 from tqdm import tqdm
 
 from six import print_
 
-# Will uncomment the UUIDs once Search actually handles them as documented
-SEARCH_INDEX_UUIDS = {
-    "mdf": "mdf",  # "d6cc98c3-ff53-4ee2-b22b-c6f945c0d30c",
-    "mdf-test": "mdf-test",  # "c082b745-32ac-4ad2-9cde-92393f6e505c",
-    "dlhub": "dlhub",  # "847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
-    "dlhub-test": "dlhub-test"  # "5c89e0a9-00e5-4171-b415-814fe4d0b8af"
-}
 AUTH_SCOPES = {
     "transfer": "urn:globus:auth:scope:transfer.api.globus.org:all",
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
@@ -49,8 +42,6 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                                 Services are listed in AUTH_SCOPES.
         client_id (str): The ID of the client, given when registered with Globus.
                          Default is the MDF Native Clients ID.
-        index (str): The default Search index.
-                     Only required if services contains 'search' or 'search_ingest'.
     clear_old_tokens (bool): If True, delete old token file if it exists, forcing user to re-login.
                              If False, use existing token file if there is one.
                              Default False.
@@ -153,8 +144,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                                  + DEFAULT_CRED_PATH
                                  + "'.")
 
-    native_client = (globus_sdk.NativeAppAuthClient(creds.get("client_id", NATIVE_CLIENT_ID),
-                                                    app_name=creds.get("app_name", "unknown")))
+    native_client = globus_sdk.NativeAppAuthClient(creds.get("client_id", NATIVE_CLIENT_ID),
+                                                   app_name=creds.get("app_name", "unknown"))
 
     servs = []
     for serv in creds.get("services", []):
@@ -163,7 +154,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
             servs += serv.split(" ")
         else:
             servs += list(serv)
-    scopes = " ".join([AUTH_SCOPES[sc] for sc in servs])
+    # Translate services into scopes, pass bad/unknown services
+    scopes = " ".join([AUTH_SCOPES.get(sc, "") for sc in servs])
 
     all_tokens = _get_tokens(native_client, scopes, creds.get("app_name", "unknown"),
                              force_refresh=clear_old_tokens)
@@ -184,15 +176,15 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Transfer client (" + e.message + ").")
             clients["transfer"] = None
+        # Remove processed service
+        servs.remove("transfer")
 
     if "search_ingest" in servs:
         try:
             ingest_authorizer = globus_sdk.RefreshTokenAuthorizer(
                                         all_tokens["search.api.globus.org"]["refresh_token"],
                                         native_client)
-            clients["search_ingest"] = SearchClient(
-                                            index=(kwargs.get("index", None) or creds["index"]),
-                                            authorizer=ingest_authorizer)
+            clients["search_ingest"] = globus_sdk.SearchClient(authorizer=ingest_authorizer)
         # Token not present
         except KeyError:
             print_("Error: Unable to retrieve Search (ingest) tokens.\n"
@@ -202,13 +194,20 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Search (ingest) client (" + e.message + ").")
             clients["search_ingest"] = None
+        # Remove processed service
+        servs.remove("search_ingest")
+        # And redundant service
+        try:
+            servs.remove("search")
+        # No issue if it isn't there
+        except Exception:
+            pass
     elif "search" in servs:
         try:
             search_authorizer = globus_sdk.RefreshTokenAuthorizer(
                                         all_tokens["search.api.globus.org"]["refresh_token"],
                                         native_client)
-            clients["search"] = SearchClient(index=(kwargs.get("index", None) or creds["index"]),
-                                             authorizer=search_authorizer)
+            clients["search"] = globus_sdk.SearchClient(authorizer=search_authorizer)
         # Token not present
         except KeyError:
             print_("Error: Unable to retrieve Search tokens.\n"
@@ -218,6 +217,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Search client (" + e.message + ").")
             clients["search"] = None
+        # Remove processed service
+        servs.remove("search")
 
     if "mdf" in servs:
         try:
@@ -234,13 +235,13 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create MDF Authorizer (" + e.message + ").")
             clients["mdf"] = None
+        # Remove processed service
+        servs.remove("mdf")
 
     if "publish" in servs:
         try:
             publish_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                        all_tokens[("https://auth.globus.org/scopes"
-                                                    "/ab24b500-37a2-4bad-ab66-d8232c18e6e5"
-                                                    "/publish_api")]["refresh_token"],
+                                        all_tokens["publish.api.globus.org"]["refresh_token"],
                                         native_client)
             clients["publish"] = DataPublicationClient(authorizer=publish_authorizer)
         # Token not present
@@ -252,6 +253,12 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         except globus_sdk.GlobusAPIError as e:
             print_("Error: Unable to create Publish client (" + e.message + ").")
             clients["publish"] = None
+        # Remove processed service
+        servs.remove("publish")
+
+    # Warn of invalid services
+    if servs:
+        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
 
     return clients
 
@@ -268,12 +275,10 @@ def confidential_login(credentials=None):
         client_secret (str): The client's secret for authentication.
         services (list of str): Services to authenticate with.
                                 Services are listed in AUTH_SCOPES.
-        index: The default Search index.
-               Only required if services contains 'search' or 'search_ingest'.
 
     Returns:
     dict: The clients and authorizers requested, indexed by service name.
-          For example, if login() is told to auth with 'search'
+          For example, if confidential_login() is told to auth with 'search'
             then the search client will be in the 'search' field.
     """
     DEFAULT_CRED_FILENAME = "confidential_globus_login.json"
@@ -319,25 +324,91 @@ def confidential_login(credentials=None):
     if "transfer" in servs:
         clients["transfer"] = globus_sdk.TransferClient(
                                 authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                                conf_client,
-                                                scopes=AUTH_SCOPES["transfer"]))
+                                                conf_client, scopes=AUTH_SCOPES["transfer"]))
+        # Remove processed service
+        servs.remove("transfer")
+
     if "search_ingest" in servs:
-        clients["search_ingest"] = SearchClient(index=creds["index"],
-                                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                                    conf_client,
-                                                    scopes=AUTH_SCOPES["search_ingest"]))
+        clients["search_ingest"] = globus_sdk.SearchClient(
+                                        authorizer=globus_sdk.ClientCredentialsAuthorizer(
+                                            conf_client, scopes=AUTH_SCOPES["search_ingest"]))
+        # Remove processed service
+        servs.remove("search_ingest")
+        # And redundant service
+        try:
+            servs.remove("search")
+        # No issue if it isn't there
+        except Exception:
+            pass
     elif "search" in servs:
-        clients["search"] = SearchClient(index=creds["index"],
-                                         authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                                conf_client,
-                                                scopes=AUTH_SCOPES["search"]))
+        clients["search"] = globus_sdk.SearchClient(
+                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
+                                    conf_client, scopes=AUTH_SCOPES["search"]))
+        # Remove processed service
+        servs.remove("search")
+
     if "mdf" in servs:
         clients["mdf"] = globus_sdk.ClientCredentialsAuthorizer(
                                 conf_client, scopes=AUTH_SCOPES["mdf"])
+        # Remove processed service
+        servs.remove("mdf")
+
     if "publish" in servs:
         clients["publish"] = DataPublicationClient(
                                 authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                                 conf_client, scopes=AUTH_SCOPES["publish"]))
+        # Remove processed service
+        servs.remove("publish")
+
+    # Warn of invalid services
+    if servs:
+        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
+
+    return clients
+
+
+def anonymous_login(services):
+    """Initialize services without authenticating to Globus Auth.
+
+    Arguments:
+    services (str or list of str): The services to initialize clients for.
+                                   Note that not all services support unauthenticated clients.
+
+    Returns:
+    dict: The clients requested, indexed by service name.
+          For example, if anonymous_login() is told to auth with 'search'
+            then the search client will be in the 'search' field.
+    """
+    if isinstance(services, str):
+        services = [services]
+
+    clients = {}
+    # Initialize valid services
+    if "transfer" in services:
+        clients["transfer"] = globus_sdk.TransferClient()
+        services.remove("transfer")
+
+    if "search" in services:
+        clients["search"] = globus_sdk.SearchClient()
+        services.remove("search")
+
+    if "publish" in services:
+        clients["publish"] = DataPublicationClient()
+        services.remove("publish")
+
+    # Notify user of auth-only services
+    if "search_ingest" in services:
+        print_("Error: Service 'search_ingest' requires authentication.")
+        services.remove("search_ingest")
+
+    if "mdf" in services:
+        print_("Error: Service 'mdf' requires authentication.")
+        services.remove("mdf")
+
+    # Warn of invalid services
+    if services:
+        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in services]))
+
     return clients
 
 
@@ -667,104 +738,6 @@ def dict_merge(base, addition):
 # *************************************************
 # * Clients
 # *************************************************
-
-class SearchClient(BaseClient):
-    """Access (search and ingest) Globus Search."""
-
-    def __init__(self, index, base_url="https://search.api.globus.org/", **kwargs):
-        app_name = kwargs.pop('app_name', 'Search Client v0.2')
-        BaseClient.__init__(self, "search", base_url=base_url,
-                            app_name=app_name, **kwargs)
-        self._headers['Content-Type'] = 'application/json'
-        self.index = SEARCH_INDEX_UUIDS.get(index.strip().lower()) or index
-
-    def _base_index_uri(self):
-        return '/v1/index/{}'.format(self.index)
-
-    def search(self, q, limit=None, offset=None, query_template=None,
-               advanced=None, **params):
-        """
-        Perform a simple ``GET`` based search.
-
-        Does not support all of the behaviors and parameters of advanced
-        searches.
-
-        **Parameters**
-
-          ``q`` (*string*)
-            The user-query string. Required for simple searches (and most
-            advanced searches).
-
-          ``limit`` (*int*)
-            Optional. The number of results to return.
-
-          ``offset`` (*int*)
-            Optional. An offset into the total result set for paging.
-
-          ``query_template`` (*string*)
-            Optional. A query_template name as defined within the Search
-            service.
-
-          ``advanced`` (*bool*)
-            Use simple query parsing vs. advanced query syntax when
-            interpreting ``q``. Defaults to False.
-
-          ``params``
-            Any additional query params to pass. For internal use only.
-        """
-        uri = slash_join(self._base_index_uri(), 'search')
-        merge_params(params, q=q, limit=limit, offset=offset,
-                     query_template=query_template, advanced=advanced)
-        return self.get(uri, params=params)
-
-    def structured_search(self, data, **params):
-        """
-        Perform a structured, ``POST``-based, search.
-
-        **Parameters**
-
-          ``data`` (*dict*)
-            A valid GSearchRequest document to execute.
-
-          ``advanced`` (*bool*)
-            Use simple query parsing vs. advanced query syntax when
-            interpreting the query string. Defaults to False.
-
-          ``params``
-            Any additional query params to pass. For internal use only.
-        """
-        uri = slash_join(self._base_index_uri(), 'search')
-        return self.post(uri, json_body=data, params=params)
-
-    def ingest(self, data, **params):
-        """
-        Perform a simple ``POST`` based ingest op.
-
-        **Parameters**
-
-          ``data`` (*dict*)
-            A valid GIngest document to index.
-
-          ``params``
-            Any additional query params to pass. For internal use only.
-        """
-        uri = slash_join(self._base_index_uri(), 'ingest')
-        return self.post(uri, json_body=data, params=params)
-
-    def remove(self, subject, **params):
-        uri = slash_join(self._base_index_uri(), "subject")
-        params["subject"] = subject
-        return self.delete(uri, params=params)
-
-    def mapping(self, **params):
-        """Get the mapping for the index."""
-        uri = "/unstable/index/{}/mapping".format(self.index)
-        return self.get(uri, params=params)
-
-    def delete_by_query(self, data, **params):
-        uri = slash_join(self._base_index_uri(), 'delete_by_query')
-        return self.post(uri, json_body=data, params=params)
-
 
 class DataPublicationClient(BaseClient):
     """Publish data with Globus Publish."""
