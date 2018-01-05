@@ -22,11 +22,12 @@ def test_login(capsys):
 
     # Test other services
     creds2 = deepcopy(credentials)
-    creds2["services"] = ["search_ingest", "mdf", "transfer"]
+    creds2["services"] = ["search_ingest", "mdf", "transfer", "publish"]
     res2 = toolbox.login(creds2)
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res2.get("mdf"), globus_sdk.RefreshTokenAuthorizer)
+    assert isinstance(res2.get("publish"), toolbox.DataPublicationClient)
 
     # Test nothing
     creds3 = deepcopy(credentials)
