@@ -258,7 +258,7 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
     if "moc" in servs:
         try:
             mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["connect"]["refresh_token"],
+                                    all_tokens["mdf_dataset_submission"]["refresh_token"],
                                     native_client)
             clients["moc"] = mdf_authorizer
         # Token not present
