@@ -18,10 +18,9 @@ AUTH_SCOPES = {
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
     "mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
-    # "urn:globus:auth:scope:api.materialsdatafacility.org:all"
     "publish": ("https://auth.globus.org/scopes/"
-                "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api")
-    # "urn:globus:auth:scope:publish.api.globus.org:all"
+                "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"),
+    "moc": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect"
 }
 
 
@@ -256,6 +255,24 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         # Remove processed service
         servs.remove("publish")
 
+    if "moc" in servs:
+        try:
+            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                    all_tokens["connect"]["refresh_token"],
+                                    native_client)
+            clients["moc"] = mdf_authorizer
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve MOC tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["mdf"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create MOC Authorizer (" + e.message + ").")
+            clients["moc"] = None
+        # Remove processed service
+        servs.remove("moc")
+
     # Warn of invalid services
     if servs:
         print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
@@ -359,6 +376,12 @@ def confidential_login(credentials=None):
                                                 conf_client, scopes=AUTH_SCOPES["publish"]))
         # Remove processed service
         servs.remove("publish")
+
+    if "moc" in servs:
+        clients["moc"] = globus_sdk.ClientCredentialsAuthorizer(
+                                conf_client, scopes=AUTH_SCOPES["moc"])
+        # Remove processed service
+        servs.remove("moc")
 
     # Warn of invalid services
     if servs:
