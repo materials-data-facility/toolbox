@@ -428,6 +428,10 @@ def anonymous_login(services):
         print_("Error: Service 'mdf' requires authentication.")
         services.remove("mdf")
 
+    if "moc" in services:
+        print_("Error: Service 'moc' requires authentication.")
+        services.remove("moc")
+
     # Warn of invalid services
     if services:
         print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in services]))
