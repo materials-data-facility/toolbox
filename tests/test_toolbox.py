@@ -148,7 +148,7 @@ def test_format_gmeta():
     md1 = {
         "mdf": {
             "acl": ["public"],
-            "landing_page": "https://example.com"
+            "mdf_id": "123"
             }
         }
     # More complex GMetaEntry
@@ -158,7 +158,6 @@ def test_format_gmeta():
                 "acl": ["public"],
                 "source_name": "source name",
                 "citation": ["abc"],
-                "landing_page": "http://www.globus.org",
                 "data_contact": {
                     "given_name": "Test",
                     "family_name": "McTesterson",
@@ -173,7 +172,8 @@ def test_format_gmeta():
                 }],
                 "ingest_date": "Jan 1, 2017",
                 "metadata_version": "1.1",
-                "mdf_id": "1",
+                "mdf_id": "123",
+                "parent_id": "000",
                 "resource_type": "dataset"
         },
         "dc": {},
@@ -185,11 +185,11 @@ def test_format_gmeta():
     assert gme1 == {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": "https://example.com",
+            "subject": "https://materialsdatafacility.org/data/123/123",
             "visible_to": ["public"],
             "content": {
                 "mdf": {
-                    "landing_page": "https://example.com"
+                    "mdf_id": "123"
                 }
             }
         }
@@ -197,14 +197,13 @@ def test_format_gmeta():
     assert gme2 == {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": "http://www.globus.org",
+            "subject": "https://materialsdatafacility.org/data/000/123",
             "visible_to": ["public"],
             "content": {
                 "mdf": {
                     "title": "test",
                     "source_name": "source name",
                     "citation": ["abc"],
-                    "landing_page": "http://www.globus.org",
                     "data_contact": {
                         "given_name": "Test",
                         "family_name": "McTesterson",
@@ -219,7 +218,8 @@ def test_format_gmeta():
                     }],
                     "ingest_date": "Jan 1, 2017",
                     "metadata_version": "1.1",
-                    "mdf_id": "1",
+                    "mdf_id": "123",
+                    "parent_id": "000",
                     "resource_type": "dataset"
                 },
                 "dc": {},

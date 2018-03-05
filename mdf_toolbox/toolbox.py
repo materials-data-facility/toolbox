@@ -529,7 +529,7 @@ def format_gmeta(data):
     Arguments:
     data (dict or list): The data to be formatted.
         If data is a dict, it must contain:
-        data["mdf"]["landing_page"] (str): A URI to a web page for the entry.
+        data["mdf"]["mdf_id"] (str): A unique identifier.
         data["mdf"]["acl"] (list of str): A list of Globus UUIDs that are allowed to view the entry.
         If data is a list, it must consist of GMetaEntry documents.
 
@@ -541,7 +541,9 @@ def format_gmeta(data):
         return {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": data["mdf"]["landing_page"],
+            "subject": ("https://materialsdatafacility.org/data/{}/{}"
+                        .format(data["mdf"].get("parent_id", data["mdf"]["mdf_id"]),
+                                data["mdf"]["mdf_id"])),
             "visible_to": data["mdf"].pop("acl"),
             "content": data
             }
