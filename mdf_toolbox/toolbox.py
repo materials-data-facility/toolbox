@@ -22,6 +22,12 @@ AUTH_SCOPES = {
                 "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"),
     "moc": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect"
 }
+SEARCH_INDEX_UUIDS = {
+    "mdf": "d6cc98c3-ff53-4ee2-b22b-c6f945c0d30c",
+    "mdf-test": "5acded0c-a534-45af-84be-dcf042e36412",
+    "dlhub": "847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
+    "dlhub-test": "5c89e0a9-00e5-4171-b415-814fe4d0b8af"
+}
 
 
 # *************************************************
@@ -511,7 +517,7 @@ def uncompress_tree(root, verbose=False):
 
 
 # *************************************************
-# * GMeta formatting utilities
+# * Globus Search utilities
 # *************************************************
 
 def format_gmeta(data):
@@ -599,8 +605,32 @@ def gmeta_pop(gmeta, info=False):
         return results
 
 
+def translate_index(index_name):
+    """Translate a known Globus Search index into the index UUID.
+    The UUID is the proper way to access indices, and will eventually be the only way.
+    This method will not change names it cannot disambiguate.
+
+    Arguments:
+    index_name (str): The name of the index.
+
+    Returns:
+    str: The UUID of the index. If the index is not known and is not unambiguous,
+            this will be the index_name unchanged.
+    """
+    uuid = SEARCH_INDEX_UUIDS.get(index_name.strip().lower())
+    if not uuid:
+        try:
+            index_info = globus_sdk.SearchClient().get_index(index_name).data
+            if not isinstance(index_info, dict):
+                raise ValueError("Multiple UUIDs possible")
+            uuid = index_info.get("id", index_name)
+        except Exception:
+            uuid = index_name
+    return uuid
+
+
 # *************************************************
-# * Globus utilities
+# * Globus Transfer utilities
 # *************************************************
 
 def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None):
