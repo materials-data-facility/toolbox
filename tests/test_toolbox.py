@@ -347,6 +347,15 @@ def test_gmeta_pop():
         toolbox.gmeta_pop(1)
 
 
+def test_translate_index():
+    # Known index
+    assert toolbox.translate_index("mdf") == "d6cc98c3-ff53-4ee2-b22b-c6f945c0d30c"
+    # Unknown index
+    assert toolbox.translate_index("frdr") == "9be6dd95-48f0-48bb-82aa-c6577a988775"
+    # Invalid index
+    assert toolbox.translate_index("invalid_index_not_real") == "invalid_index_not_real"
+
+
 def test_quick_transfer():
     # TODO
     pass
