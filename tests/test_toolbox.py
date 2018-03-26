@@ -349,7 +349,7 @@ def test_gmeta_pop():
 
 def test_translate_index():
     # Known index
-    assert toolbox.translate_index("mdf") == "d6cc98c3-ff53-4ee2-b22b-c6f945c0d30c"
+    assert toolbox.translate_index("mdf") == "1a57bbe5-5272-477f-9d31-343b8258b7a5"
     # Unknown index
     assert toolbox.translate_index("frdr") == "9be6dd95-48f0-48bb-82aa-c6577a988775"
     # Invalid index
