@@ -19,10 +19,11 @@ AUTH_SCOPES = {
     "transfer": "urn:globus:auth:scope:transfer.api.globus.org:all",
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
-    "mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
+    "data_mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
     "publish": ("https://auth.globus.org/scopes/"
                 "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"),
-    "moc": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect"
+    "connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
+    "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all"
 }
 SEARCH_INDEX_UUIDS = {
     "mdf": "1a57bbe5-5272-477f-9d31-343b8258b7a5",
@@ -64,7 +65,7 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
     """
     NATIVE_CLIENT_ID = "98bfc684-977f-4670-8669-71f8337688e4"
     DEFAULT_CRED_FILENAME = "globus_login.json"
-    DEFAULT_CRED_PATH = os.path.expanduser("~/mdf/credentials")
+    DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
 
     def _get_tokens(client, scopes, app_name, force_refresh=False):
         token_path = os.path.join(DEFAULT_CRED_PATH, app_name + "_tokens.json")
@@ -101,7 +102,10 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                     # Tokens corrupted
                     os.remove(token_path)
         if not os.path.exists(token_path):
-            os.makedirs(DEFAULT_CRED_PATH, exist_ok=True)
+            try:
+                os.makedirs(DEFAULT_CRED_PATH)
+            except (IOError, OSError):
+                pass
             client.oauth2_start_flow(requested_scopes=scopes, refresh_tokens=True)
             authorize_url = client.oauth2_get_authorize_url()
 
@@ -231,23 +235,23 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         # Remove processed service
         servs.remove("search")
 
-    if "mdf" in servs:
+    if "data_mdf" in servs:
         try:
             mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
                                     all_tokens["data.materialsdatafacility.org"]["refresh_token"],
                                     native_client)
-            clients["mdf"] = mdf_authorizer
+            clients["data_mdf"] = mdf_authorizer
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve MDF tokens.\n"
+            print_("Error: Unable to retrieve MDF/NCSA tokens.\n"
                    "You may need to delete your old tokens and retry.")
-            clients["mdf"] = None
+            clients["data_mdf"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF Authorizer (" + e.message + ").")
-            clients["mdf"] = None
+            print_("Error: Unable to create MDF/NCSA Authorizer (" + e.message + ").")
+            clients["data_mdf"] = None
         # Remove processed service
-        servs.remove("mdf")
+        servs.remove("data_mdf")
 
     if "publish" in servs:
         try:
@@ -267,23 +271,41 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         # Remove processed service
         servs.remove("publish")
 
-    if "moc" in servs:
+    if "connect" in servs:
         try:
             mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
                                     all_tokens["mdf_dataset_submission"]["refresh_token"],
                                     native_client)
-            clients["moc"] = mdf_authorizer
+            clients["connect"] = mdf_authorizer
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve MOC tokens.\n"
+            print_("Error: Unable to retrieve MDF Connect tokens.\n"
                    "You may need to delete your old tokens and retry.")
-            clients["mdf"] = None
+            clients["connect"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MOC Authorizer (" + e.message + ").")
-            clients["moc"] = None
+            print_("Error: Unable to create MDF Connect Authorizer (" + e.message + ").")
+            clients["connect"] = None
         # Remove processed service
-        servs.remove("moc")
+        servs.remove("connect")
+
+    if "petrel" in servs:
+        try:
+            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                    all_tokens["petrel_https_server"]["refresh_token"],
+                                    native_client)
+            clients["petrel"] = mdf_authorizer
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve MDF/Petrel tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["petrel"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create MDF/Petrel Authorizer (" + e.message + ").")
+            clients["petrel"] = None
+        # Remove processed service
+        servs.remove("petrel")
 
     # Warn of invalid services
     if servs:
@@ -311,7 +333,7 @@ def confidential_login(credentials=None):
             then the search client will be in the 'search' field.
     """
     DEFAULT_CRED_FILENAME = "confidential_globus_login.json"
-    DEFAULT_CRED_PATH = os.path.expanduser("~/mdf/credentials")
+    DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
     # Read credentials
     if type(credentials) is str:
         try:
@@ -376,11 +398,11 @@ def confidential_login(credentials=None):
         # Remove processed service
         servs.remove("search")
 
-    if "mdf" in servs:
-        clients["mdf"] = globus_sdk.ClientCredentialsAuthorizer(
-                                conf_client, scopes=AUTH_SCOPES["mdf"])
+    if "data_mdf" in servs:
+        clients["data_mdf"] = globus_sdk.ClientCredentialsAuthorizer(
+                                conf_client, scopes=AUTH_SCOPES["data_mdf"])
         # Remove processed service
-        servs.remove("mdf")
+        servs.remove("data_mdf")
 
     if "publish" in servs:
         clients["publish"] = DataPublicationClient(
@@ -389,11 +411,17 @@ def confidential_login(credentials=None):
         # Remove processed service
         servs.remove("publish")
 
-    if "moc" in servs:
-        clients["moc"] = globus_sdk.ClientCredentialsAuthorizer(
-                                conf_client, scopes=AUTH_SCOPES["moc"])
+    if "connect" in servs:
+        clients["connect"] = globus_sdk.ClientCredentialsAuthorizer(
+                                conf_client, scopes=AUTH_SCOPES["connect"])
         # Remove processed service
-        servs.remove("moc")
+        servs.remove("connect")
+
+    if "petrel" in servs:
+        clients["petrel"] = globus_sdk.ClientCredentialsAuthorizer(
+                                conf_client, scopes=AUTH_SCOPES["petrel"])
+        # Remove processed service
+        servs.remove("petrel")
 
     # Warn of invalid services
     if servs:
@@ -436,13 +464,17 @@ def anonymous_login(services):
         print_("Error: Service 'search_ingest' requires authentication.")
         services.remove("search_ingest")
 
-    if "mdf" in services:
-        print_("Error: Service 'mdf' requires authentication.")
-        services.remove("mdf")
+    if "data_mdf" in services:
+        print_("Error: Service 'data_mdf' requires authentication.")
+        services.remove("data_mdf")
 
-    if "moc" in services:
-        print_("Error: Service 'moc' requires authentication.")
-        services.remove("moc")
+    if "connect" in services:
+        print_("Error: Service 'connect' requires authentication.")
+        services.remove("connect")
+
+    if "petrel" in services:
+        print_("Error: Service 'petrel' requires authentication.")
+        services.remove("petrel")
 
     # Warn of invalid services
     if services:
@@ -807,7 +839,7 @@ def dict_merge(base, addition):
 class MDFConnectClient:
     """MDFConnect"""
     __app_name = "MDF_Connect_Client"
-    __login_services = ["moc"]
+    __login_services = ["connect"]
 
     def __init__(self, dc=None, mdf=None, mrr=None, custom=None,
                  data=None, index=None, services=None, test=False,
@@ -833,7 +865,7 @@ class MDFConnectClient:
         self.source_name = None
 
         self.__authorizer = login({"app_name": self.__app_name,
-                                   "services": self.__login_services}).get("moc")
+                                   "services": self.__login_services}).get("connect")
         if not self.__authorizer:
             raise ValueError("Unable to authenticate")
 

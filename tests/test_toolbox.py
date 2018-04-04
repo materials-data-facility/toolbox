@@ -22,12 +22,14 @@ def test_login(capsys):
 
     # Test other services
     creds2 = deepcopy(credentials)
-    creds2["services"] = ["search_ingest", "transfer", "mdf", "moc", "publish"]
+    creds2["services"] = ["search_ingest", "transfer", "data_mdf", "connect",
+                          "petrel", "publish"]
     res2 = mdf_toolbox.login(creds2)
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
-    assert isinstance(res2.get("mdf"), globus_sdk.RefreshTokenAuthorizer)
-    assert isinstance(res2.get("moc"), globus_sdk.RefreshTokenAuthorizer)
+    assert isinstance(res2.get("data_mdf"), globus_sdk.RefreshTokenAuthorizer)
+    assert isinstance(res2.get("connect"), globus_sdk.RefreshTokenAuthorizer)
+    assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("publish"), mdf_toolbox.DataPublicationClient)
 
     # Test nothing
@@ -68,11 +70,12 @@ def test_anonymous_login(capsys):
     assert isinstance(res2.get("search"), globus_sdk.SearchClient)
 
     # Auth-only services don't work
-    assert mdf_toolbox.anonymous_login(["search_ingest", "mdf", "moc"]) == {}
+    assert mdf_toolbox.anonymous_login(["search_ingest", "data_mdf", "connect", "petrel"]) == {}
     out, err = capsys.readouterr()
     assert "Error: Service 'search_ingest' requires authentication." in out
-    assert "Error: Service 'mdf' requires authentication." in out
-    assert "Error: Service 'moc' requires authentication." in out
+    assert "Error: Service 'data_mdf' requires authentication." in out
+    assert "Error: Service 'connect' requires authentication." in out
+    assert "Error: Service 'petrel' requires authentication." in out
 
     # Bad services don't work
     assert mdf_toolbox.anonymous_login(["garbage", "invalid"]) == {}
