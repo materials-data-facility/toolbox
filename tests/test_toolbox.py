@@ -3,7 +3,7 @@ import os
 import json
 import pytest
 import globus_sdk
-from mdf_toolbox import toolbox
+import mdf_toolbox
 
 
 credentials = {
@@ -16,34 +16,34 @@ def test_login(capsys):
     # Login works
     creds1 = deepcopy(credentials)
     creds1["services"] = ["search"]
-    res1 = toolbox.login(creds1)
+    res1 = mdf_toolbox.login(creds1)
     assert type(res1) is dict
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
 
     # Test other services
     creds2 = deepcopy(credentials)
     creds2["services"] = ["search_ingest", "transfer", "mdf", "moc", "publish"]
-    res2 = toolbox.login(creds2)
+    res2 = mdf_toolbox.login(creds2)
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res2.get("mdf"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("moc"), globus_sdk.RefreshTokenAuthorizer)
-    assert isinstance(res2.get("publish"), toolbox.DataPublicationClient)
+    assert isinstance(res2.get("publish"), mdf_toolbox.DataPublicationClient)
 
     # Test nothing
     creds3 = deepcopy(credentials)
-    assert toolbox.login(creds3) == {}
+    assert mdf_toolbox.login(creds3) == {}
 
     # Error on bad creds
     with pytest.raises(ValueError):
-        toolbox.login("nope")
+        mdf_toolbox.login("nope")
     with pytest.raises(ValueError):
-        toolbox.login()
+        mdf_toolbox.login()
 
     # Error on bad services
     creds4 = deepcopy(credentials)
     creds4["services"] = ["garbage", "invalid"]
-    assert toolbox.login(creds4) == {}
+    assert mdf_toolbox.login(creds4) == {}
     out, err = capsys.readouterr()
     assert "Unknown or invalid service: 'garbage'." in out
     assert "Unknown or invalid service: 'invalid'." in out
@@ -58,24 +58,24 @@ def test_confidential_login():
 
 def test_anonymous_login(capsys):
     # Valid services work
-    res1 = toolbox.anonymous_login(["transfer", "search", "publish"])
+    res1 = mdf_toolbox.anonymous_login(["transfer", "search", "publish"])
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
     assert isinstance(res1.get("transfer"), globus_sdk.TransferClient)
-    assert isinstance(res1.get("publish"), toolbox.DataPublicationClient)
+    assert isinstance(res1.get("publish"), mdf_toolbox.DataPublicationClient)
 
     # Single service works
-    res2 = toolbox.anonymous_login("search")
+    res2 = mdf_toolbox.anonymous_login("search")
     assert isinstance(res2.get("search"), globus_sdk.SearchClient)
 
     # Auth-only services don't work
-    assert toolbox.anonymous_login(["search_ingest", "mdf", "moc"]) == {}
+    assert mdf_toolbox.anonymous_login(["search_ingest", "mdf", "moc"]) == {}
     out, err = capsys.readouterr()
     assert "Error: Service 'search_ingest' requires authentication." in out
     assert "Error: Service 'mdf' requires authentication." in out
     assert "Error: Service 'moc' requires authentication." in out
 
     # Bad services don't work
-    assert toolbox.anonymous_login(["garbage", "invalid"]) == {}
+    assert mdf_toolbox.anonymous_login(["garbage", "invalid"]) == {}
     out, err = capsys.readouterr()
     assert "Unknown or invalid service: 'garbage'." in out
     assert "Unknown or invalid service: 'invalid'." in out
@@ -84,7 +84,7 @@ def test_anonymous_login(capsys):
 def test_find_files():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
     # Get everything
-    res1 = list(toolbox.find_files(root))
+    res1 = list(mdf_toolbox.find_files(root))
     fn1 = [r["filename"] for r in res1]
     assert all([name in fn1 for name in [
                 "2_toolbox.txt",
@@ -102,7 +102,7 @@ def test_find_files():
         assert os.path.isfile(os.path.join(res["path"], res["filename"]))
 
     # Get everything (by regex)
-    res2 = list(toolbox.find_files(root, "toolbox"))
+    res2 = list(mdf_toolbox.find_files(root, "toolbox"))
     fn2 = [r["filename"] for r in res2]
     correct2 = [
         "2_toolbox.txt",
@@ -119,7 +119,7 @@ def test_find_files():
     assert fn2 == correct2
 
     # Get only txt files
-    res3 = list(toolbox.find_files(root, "txt$"))
+    res3 = list(mdf_toolbox.find_files(root, "txt$"))
     fn3 = [r["filename"] for r in res3]
     correct3 = [
         "2_toolbox.txt",
@@ -132,12 +132,12 @@ def test_find_files():
 
     # Test error
     with pytest.raises(ValueError):
-        next(toolbox.find_files("/this/is/not/a/valid/path"))
+        next(mdf_toolbox.find_files("/this/is/not/a/valid/path"))
 
 
 def test_uncompress_tree():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
-    toolbox.uncompress_tree(root)
+    mdf_toolbox.uncompress_tree(root)
     path = os.path.join(root, "toolbox_more", "tlbx_uncompressed.txt")
     assert os.path.isfile(path)
     os.remove(path)
@@ -181,7 +181,7 @@ def test_format_gmeta():
     }
 
     # Format both
-    gme1 = toolbox.format_gmeta(md1)
+    gme1 = mdf_toolbox.format_gmeta(md1)
     assert gme1 == {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
@@ -193,7 +193,7 @@ def test_format_gmeta():
                 }
             }
         }
-    gme2 = toolbox.format_gmeta(md2)
+    gme2 = mdf_toolbox.format_gmeta(md2)
     assert gme2 == {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
@@ -227,7 +227,7 @@ def test_format_gmeta():
             }
         }
     # Format into GMetaList
-    gmlist = toolbox.format_gmeta([gme1, gme2])
+    gmlist = mdf_toolbox.format_gmeta([gme1, gme2])
     assert gmlist == {
         "@datatype": "GIngest",
         "@version": "2016-11-09",
@@ -241,7 +241,7 @@ def test_format_gmeta():
 
     # Error if bad type
     with pytest.raises(TypeError):
-        toolbox.format_gmeta(1)
+        mdf_toolbox.format_gmeta(1)
 
 
 def test_gmeta_pop():
@@ -292,7 +292,7 @@ def test_gmeta_pop():
         def json(self):
             return self.data
     ghttp = globus_sdk.GlobusHTTPResponse(TestResponse())
-    popped = toolbox.gmeta_pop(ghttp)
+    popped = mdf_toolbox.gmeta_pop(ghttp)
     assert popped == [{
             'mdf': {
                 'links': {
@@ -316,7 +316,7 @@ def test_gmeta_pop():
                 }
             }
         }]
-    info_pop = toolbox.gmeta_pop(ghttp, info=True)
+    info_pop = mdf_toolbox.gmeta_pop(ghttp, info=True)
     print(info_pop)
     assert info_pop == (popped, {'total_query_matches': 22})
 
@@ -335,7 +335,7 @@ def test_gmeta_pop():
                         ]
                     }
                     ]})
-    assert toolbox.gmeta_pop(str_gmeta) == [
+    assert mdf_toolbox.gmeta_pop(str_gmeta) == [
                             {"test1": "test1"},
                             {"test2": "test2"},
                             {"test3": "test3"},
@@ -344,16 +344,16 @@ def test_gmeta_pop():
 
     # Error on bad data
     with pytest.raises(TypeError):
-        toolbox.gmeta_pop(1)
+        mdf_toolbox.gmeta_pop(1)
 
 
 def test_translate_index():
     # Known index
-    assert toolbox.translate_index("mdf") == "1a57bbe5-5272-477f-9d31-343b8258b7a5"
+    assert mdf_toolbox.translate_index("mdf") == "1a57bbe5-5272-477f-9d31-343b8258b7a5"
     # Unknown index
-    assert toolbox.translate_index("frdr") == "9be6dd95-48f0-48bb-82aa-c6577a988775"
+    assert mdf_toolbox.translate_index("frdr") == "9be6dd95-48f0-48bb-82aa-c6577a988775"
     # Invalid index
-    assert toolbox.translate_index("invalid_index_not_real") == "invalid_index_not_real"
+    assert mdf_toolbox.translate_index("invalid_index_not_real") == "invalid_index_not_real"
 
 
 def test_quick_transfer():
@@ -413,16 +413,16 @@ def test_dict_merge():
         }
     }
     # Proper use
-    assert toolbox.dict_merge(base, add) == merged
-    assert toolbox.dict_merge({}, {}) == {}
+    assert mdf_toolbox.dict_merge(base, add) == merged
+    assert mdf_toolbox.dict_merge({}, {}) == {}
 
     # Check errors
     with pytest.raises(TypeError):
-        toolbox.dict_merge(1, {})
+        mdf_toolbox.dict_merge(1, {})
     with pytest.raises(TypeError):
-        toolbox.dict_merge({}, "a")
+        mdf_toolbox.dict_merge({}, "a")
     with pytest.raises(TypeError):
-        toolbox.dict_merge([], [])
+        mdf_toolbox.dict_merge([], [])
 
 
 def test_DataPublicationClient():
