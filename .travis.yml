@@ -1,7 +1,7 @@
 language: python
 python:
 - '2.7'
-#- '3.3'  # Re-enable after Travis updates pip
+- '3.3'
 - '3.4'
 - '3.5'
 - '3.6'
@@ -19,6 +19,7 @@ before_install:
 - tar xvf travis.tar
 - mkdir -p ~/mdf/credentials/
 - mv MDF_Forge_tokens.json ~/mdf/credentials/MDF_Forge_tokens.json
+- mv MDF_Connect_Client_tokens.json ~/mdf/credentials/MDF_Connect_Client_tokens.json
 after_success:
 - coveralls
 notifications:
