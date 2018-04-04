@@ -1,4 +1,3 @@
-import pytest
 from mdf_toolbox import MDFConnectClient, CONNECT_SERVICE_LOC, CONNECT_DEV_LOC
 
 
