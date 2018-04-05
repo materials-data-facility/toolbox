@@ -2,6 +2,7 @@ from copy import deepcopy
 import os
 import json
 import pytest
+from globus_nexus_client import NexusClient
 import globus_sdk
 import mdf_toolbox
 
@@ -23,7 +24,7 @@ def test_login(capsys):
     # Test other services
     creds2 = deepcopy(credentials)
     creds2["services"] = ["search_ingest", "transfer", "data_mdf", "connect",
-                          "petrel", "publish"]
+                          "petrel", "publish", "mdf_connect", "groups"]
     res2 = mdf_toolbox.login(creds2)
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
@@ -31,6 +32,8 @@ def test_login(capsys):
     assert isinstance(res2.get("connect"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("publish"), mdf_toolbox.DataPublicationClient)
+    assert isinstance(res2.get("mdf_connect"), mdf_toolbox.MDFConnectClient)
+    assert isinstance(res2.get("groups"), NexusClient)
 
     # Test nothing
     creds3 = deepcopy(credentials)
@@ -60,22 +63,25 @@ def test_confidential_login():
 
 def test_anonymous_login(capsys):
     # Valid services work
-    res1 = mdf_toolbox.anonymous_login(["transfer", "search", "publish"])
+    res1 = mdf_toolbox.anonymous_login(["transfer", "search", "publish", "groups"])
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
     assert isinstance(res1.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res1.get("publish"), mdf_toolbox.DataPublicationClient)
+    assert isinstance(res1.get("groups"), NexusClient)
 
     # Single service works
     res2 = mdf_toolbox.anonymous_login("search")
     assert isinstance(res2.get("search"), globus_sdk.SearchClient)
 
     # Auth-only services don't work
-    assert mdf_toolbox.anonymous_login(["search_ingest", "data_mdf", "connect", "petrel"]) == {}
+    assert mdf_toolbox.anonymous_login(["search_ingest", "data_mdf", "connect", "petrel",
+                                        "mdf_connect"]) == {}
     out, err = capsys.readouterr()
     assert "Error: Service 'search_ingest' requires authentication." in out
     assert "Error: Service 'data_mdf' requires authentication." in out
     assert "Error: Service 'connect' requires authentication." in out
     assert "Error: Service 'petrel' requires authentication." in out
+    assert "Error: Service 'mdf_connect' requires authentication." in out
 
     # Bad services don't work
     assert mdf_toolbox.anonymous_login(["garbage", "invalid"]) == {}

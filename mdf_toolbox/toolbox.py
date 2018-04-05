@@ -8,6 +8,7 @@ import sys
 import tarfile
 import zipfile
 
+from globus_nexus_client import NexusClient
 import globus_sdk
 from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
@@ -23,7 +24,9 @@ AUTH_SCOPES = {
     "publish": ("https://auth.globus.org/scopes/"
                 "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"),
     "connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
-    "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all"
+    "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
+    "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
+    "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups"
 }
 SEARCH_INDEX_UUIDS = {
     "mdf": "1a57bbe5-5272-477f-9d31-343b8258b7a5",
@@ -289,6 +292,24 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
         # Remove processed service
         servs.remove("connect")
 
+    if "mdf_connect" in servs:
+        try:
+            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                    all_tokens["mdf_dataset_submission"]["refresh_token"],
+                                    native_client)
+            clients["mdf_connect"] = MDFConnectClient(authorizer=mdf_authorizer)
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve MDF Connect tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["mdf_connect"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create MDF Connect Client (" + e.message + ").")
+            clients["mdf_connect"] = None
+        # Remove processed service
+        servs.remove("mdf_connect")
+
     if "petrel" in servs:
         try:
             mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
@@ -306,6 +327,24 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
             clients["petrel"] = None
         # Remove processed service
         servs.remove("petrel")
+
+    if "groups" in servs:
+        try:
+            groups_authorizer = globus_sdk.RefreshTokenAuthorizer(
+                                        all_tokens["nexus.api.globus.org"]["refresh_token"],
+                                        native_client)
+            clients["groups"] = NexusClient(authorizer=groups_authorizer)
+        # Token not present
+        except KeyError:
+            print_("Error: Unable to retrieve Groups tokens.\n"
+                   "You may need to delete your old tokens and retry.")
+            clients["groups"] = None
+        # Other issue
+        except globus_sdk.GlobusAPIError as e:
+            print_("Error: Unable to create Groups client (" + e.message + ").")
+            clients["groups"] = None
+        # Remove processed service
+        servs.remove("groups")
 
     # Warn of invalid services
     if servs:
@@ -417,11 +456,23 @@ def confidential_login(credentials=None):
         # Remove processed service
         servs.remove("connect")
 
+    if "mdf_connect" in servs:
+        clients["mdf_connect"] = MDFConnectClient(
+                                    authorizer=globus_sdk.ClientCredentialsAuthorizer(
+                                                conf_client, scopes=AUTH_SCOPES["mdf_connect"]))
+        # Remove processed service
+        servs.remove("mdf_connect")
+
     if "petrel" in servs:
         clients["petrel"] = globus_sdk.ClientCredentialsAuthorizer(
                                 conf_client, scopes=AUTH_SCOPES["petrel"])
         # Remove processed service
         servs.remove("petrel")
+
+    if "groups" in servs:
+        clients["groups"] = NexusClient(
+                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
+                                             conf_client, scopes=AUTH_SCOPES["groups"]))
 
     # Warn of invalid services
     if servs:
@@ -459,6 +510,10 @@ def anonymous_login(services):
         clients["publish"] = DataPublicationClient()
         services.remove("publish")
 
+    if "groups" in services:
+        clients["groups"] = NexusClient()
+        services.remove("groups")
+
     # Notify user of auth-only services
     if "search_ingest" in services:
         print_("Error: Service 'search_ingest' requires authentication.")
@@ -475,6 +530,10 @@ def anonymous_login(services):
     if "petrel" in services:
         print_("Error: Service 'petrel' requires authentication.")
         services.remove("petrel")
+
+    if "mdf_connect" in services:
+        print_("Error: Service 'mdf_connect' requires authentication.")
+        services.remove("mdf_connect")
 
     # Warn of invalid services
     if services:
@@ -840,10 +899,15 @@ class MDFConnectClient:
     """MDFConnect"""
     __app_name = "MDF_Connect_Client"
     __login_services = ["connect"]
+    __allowed_authorizers = [
+        globus_sdk.RefreshTokenAuthorizer,
+        globus_sdk.ClientCredentialsAuthorizer,
+        globus_sdk.NullAuthorizer
+    ]
 
     def __init__(self, dc=None, mdf=None, mrr=None, custom=None,
                  data=None, index=None, services=None, test=False,
-                 service_instance=None):
+                 service_instance=None, authorizer=None):
         self.dc = dc or {}
         self.mdf = mdf or {}
         self.mrr = mrr or {}
@@ -864,8 +928,11 @@ class MDFConnectClient:
 
         self.source_name = None
 
-        self.__authorizer = login({"app_name": self.__app_name,
-                                   "services": self.__login_services}).get("connect")
+        if any([isinstance(authorizer, allowed) for allowed in self.__allowed_authorizers]):
+            self.__authorizer = authorizer
+        else:
+            self.__authorizer = login({"app_name": self.__app_name,
+                                       "services": self.__login_services}).get("connect")
         if not self.__authorizer:
             raise ValueError("Unable to authenticate")
 
