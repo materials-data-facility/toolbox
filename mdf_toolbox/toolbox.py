@@ -751,11 +751,15 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None,
                    hard errors (e.g. "permission denied")
                    and soft errors (e.g. "endpoint [temporarily] too busy")
                    so requiring retries is not uncommon for large Transfers.
+                   -1 for infinite tries (Transfer still fails after three days of no activity).
+                   None is synonymous with 0.
                    Default 10.
 
     Returns:
     str: ID of the Globus Transfer.
     """
+    if retries is None:
+        retries = 0
     INTERVAL_SEC = 10
     tdata = globus_sdk.TransferData(transfer_client, source_ep, dest_ep, verify_checksum=True)
     for item in path_list:
@@ -783,8 +787,8 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None,
         for event in transfer_client.task_event_list(res["task_id"]):
             if event["is_error"]:
                 errors.add(event)
-                print("DEBUG: ERROR {}\nFull set:\n{}".format(event["description"], errors))
-                if not retries or len(errors) > retries:
+                # retries == -1 is infinite
+                if retries != -1 and len(errors) > retries:
                     transfer_client.cancel_task(res["task_id"])
                     raise globus_sdk.GlobusError("Error transferring data: "
                                                  + event["description"])
