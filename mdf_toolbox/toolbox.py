@@ -730,7 +730,7 @@ def translate_index(index_name):
 # * Globus Transfer utilities
 # *************************************************
 
-def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None):
+def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None, retries=10):
     """Perform a Globus Transfer and monitor for success.
 
     Arguments:
@@ -746,6 +746,12 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None)
                    Default None, which will wait until a transfer succeeds or fails.
                    If this argument is -1, the transfer will submit but not wait at all.
                        There is then no error checking.
+    retries (int): The number of errors to tolerate before cancelling the task.
+                   Globus Transfer makes no distinction between
+                   hard errors (e.g. "permission denied")
+                   and soft errors (e.g. "endpoint [temporarily] too busy")
+                   so requiring retries is not uncommon for large Transfers.
+                   Default 10.
 
     Returns:
     str: ID of the Globus Transfer.
@@ -769,14 +775,19 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None)
         raise globus_sdk.GlobusError("Failed to transfer files: Transfer " + res["code"])
 
     iterations = 0
-    while timeout is not None and timeout >= 0 and not transfer_client.task_wait(
+    errors = set()
+    while (timeout is None or timeout >= 0) and not transfer_client.task_wait(
                                                             res["task_id"],
                                                             timeout=INTERVAL_SEC,
                                                             polling_interval=INTERVAL_SEC):
         for event in transfer_client.task_event_list(res["task_id"]):
             if event["is_error"]:
-                transfer_client.cancel_task(res["task_id"])
-                raise globus_sdk.GlobusError("Error transferring data: " + event["description"])
+                errors.add(event)
+                print("DEBUG: ERROR {}\nFull set:\n{}".format(event["description"], errors))
+                if not retries or len(errors) > retries:
+                    transfer_client.cancel_task(res["task_id"])
+                    raise globus_sdk.GlobusError("Error transferring data: "
+                                                 + event["description"])
             if timeout and iterations >= timeout:
                 transfer_client.cancel_task(res["task_id"])
                 raise globus_sdk.GlobusError("Transfer timed out after "
@@ -1217,17 +1228,27 @@ class MDFConnectClient:
         """
         self.test = test
 
-    def submit_dataset(self, test=False):
+    def submit_dataset(self, test=False, resubmit=False):
         """Submit your dataset to MDF Connect for processing.
 
         Arguments:
         test (bool): Submit as a test dataset (a dry-run, see set_test()).
                      If you have called set_test() or otherwise specified test=True,
                      you do not need to use this argument.
+        resubmit (bool): If you wish to submit this dataset again, set this to True.
+                         If this is the first submission, leave this False.
 
         Returns:
         str: The source_name of your dataset. This is also saved in self.source_name.
         """
+        # Ensure resubmit matches reality
+        if not resubmit and self.source_name:
+            print_("You have already submitted this dataset.")
+            return None
+        elif resubmit and not self.source_name:
+            print_("You have not already submitted this dataset.")
+            return None
+        # Check for data
         if not self.dc or not self.data:
             print_("You must populate the dc and data blocks before submission.")
             return None
