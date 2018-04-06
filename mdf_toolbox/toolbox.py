@@ -473,6 +473,8 @@ def confidential_login(credentials=None):
         clients["groups"] = NexusClient(
                                 authorizer=globus_sdk.ClientCredentialsAuthorizer(
                                              conf_client, scopes=AUTH_SCOPES["groups"]))
+        # Remove processed service
+        servs.remove("groups")
 
     # Warn of invalid services
     if servs:

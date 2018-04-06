@@ -8,7 +8,7 @@ setup(
     long_description=("Toolbox is the Materials Data Facility Python package"
                       " containing utility functions and other tools."),
     install_requires=[
-        "globus_nexus_client>=0.2.7",
+        "globus_nexus_client>=0.2.8",
         "globus-sdk>=1.5.0",
         "requests>=2.18.4",
         "tqdm>=4.19.4",
