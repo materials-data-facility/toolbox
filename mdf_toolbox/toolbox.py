@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import gzip
 import json
 import os
@@ -6,6 +6,7 @@ import re
 import requests
 import sys
 import tarfile
+import time
 import zipfile
 
 from globus_nexus_client import NexusClient
@@ -34,10 +35,12 @@ SEARCH_INDEX_UUIDS = {
     "dlhub": "847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
     "dlhub-test": "5c89e0a9-00e5-4171-b415-814fe4d0b8af"
 }
-CONNECT_SERVICE_LOC = "https://34.193.81.207:5000"
+CONNECT_SERVICE_LOC = "https://18.233.85.14:5000"
 CONNECT_DEV_LOC = "https://34.193.81.207:5000"
 CONNECT_CONVERT_ROUTE = "/convert"
 CONNECT_STATUS_ROUTE = "/status/"
+DEFAULT_INTERVAL = 5 * 60  # 5 minutes, in seconds
+DEFAULT_INACTIVITY_TIME = 3 * 60 * 60  # 3 hours, in seconds
 
 
 # *************************************************
@@ -732,8 +735,9 @@ def translate_index(index_name):
 # * Globus Transfer utilities
 # *************************************************
 
-def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None, retries=10):
-    """Perform a Globus Transfer and monitor for success.
+def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
+                    interval=DEFAULT_INTERVAL, inactivity_time=DEFAULT_INACTIVITY_TIME):
+    """Perform a Globus Transfer.
 
     Arguments:
     transfer_client (TransferClient): An authenticated Transfer client.
@@ -744,26 +748,24 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None,
         Directory paths must end in a slash, and file paths must not.
         Example: [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
                   ("/source/all_reports/", "/dest/reports/")]
-    timeout (int): Time, in scores of seconds, to wait for a transfer to complete before erroring.
-                   Default None, which will wait until a transfer succeeds or fails.
-                   If this argument is -1, the transfer will submit but not wait at all.
-                       There is then no error checking.
-    retries (int): The number of errors to tolerate before cancelling the task.
-                   Globus Transfer makes no distinction between
-                   hard errors (e.g. "permission denied")
-                   and soft errors (e.g. "endpoint [temporarily] too busy")
-                   so requiring retries is not uncommon for large Transfers.
-                   -1 for infinite tries (Transfer still fails after three days of no activity).
-                   None is synonymous with 0.
-                   Default 10.
+    interval (int): Number of seconds to wait before polling Transfer status.
+                    Default DEFAULT_INTERVAL. Minimum 1.
+    inactivity_time (int): Number of seconds a Transfer is allowed to go without progress
+                           before being cancelled. Default DEFAULT_INACTIVITY_TIME.
 
-    Returns:
-    str: ID of the Globus Transfer.
+    Yields:
+    dict: An error from the transfer, or (last) a success status
+
+    Accepts via .send():
+    bool: True: Continue the Transfer
+          False: Cancel the Transfer
+          Default True
     """
-    if retries is None:
-        retries = 0
-    INTERVAL_SEC = 10
-    tdata = globus_sdk.TransferData(transfer_client, source_ep, dest_ep, verify_checksum=True)
+    if interval < 1:
+        interval = 1
+    deadline = datetime.fromtimestamp(int(time.time()) + inactivity_time, timezone.utc)
+    tdata = globus_sdk.TransferData(transfer_client, source_ep, dest_ep,
+                                    deadline=deadline, verify_checksum=True)
     for item in path_list:
         # Is not directory
         if item[0][-1] != "/" and item[1][-1] != "/":
@@ -780,28 +782,89 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, timeout=None,
     if res["code"] != "Accepted":
         raise globus_sdk.GlobusError("Failed to transfer files: Transfer " + res["code"])
 
-    iterations = 0
-    errors = set()
-    while (timeout is None or timeout >= 0) and not transfer_client.task_wait(
-                                                            res["task_id"],
-                                                            timeout=INTERVAL_SEC,
-                                                            polling_interval=INTERVAL_SEC):
+    error_timestamps = set()
+    # while Transfer is active
+    while not transfer_client.task_wait(res["task_id"], timeout=interval,
+                                                        polling_interval=interval):
         for event in transfer_client.task_event_list(res["task_id"]):
-            if event["is_error"]:
-                errors.add(event)
-                # retries == -1 is infinite
-                if retries != -1 and len(errors) > retries:
+            # Only process error events that have not been presented to the user
+            # Events do not have UUIDs, so if there are multiple simultaneous errors
+            #   only the last (chronologically) error will be processed
+            if event["is_error"] and event["time"] not in error_timestamps:
+                error_timestamps.add(event["time"])
+                ret_event = event.data
+                # yield value should always have success: bool
+                ret_event["success"] = False
+                # User can cancel Transfer with .send(False)
+                cont = yield ret_event
+                if cont is False:
                     transfer_client.cancel_task(res["task_id"])
-                    raise globus_sdk.GlobusError("Error transferring data: "
-                                                 + event["description"])
-            if timeout and iterations >= timeout:
-                transfer_client.cancel_task(res["task_id"])
-                raise globus_sdk.GlobusError("Transfer timed out after "
-                                             + str(iterations * INTERVAL_SEC)
-                                             + " seconds.")
-            iterations += 1
+                    break
+            # If progress has been made, move deadline forward
+            elif event["code"] == "PROGRESS":
+                new_deadline = datetime.fromtimestamp(int(time.time()) + inactivity_time,
+                                                      timezone.utc)
+                transfer_client.update_task(res["task_id"], {"deadline": new_deadline})
+    # Transfer is no longer active; now check if succeeded
+    task = transfer_client.get_task(res["task_id"]).data
+    task["success"] = (task["status"] == "SUCCEEDED")
+    yield task
 
-    return res["task_id"]
+
+def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None, retries=10):
+    """Perform a Globus Transfer and monitor for success.
+
+    Arguments:
+    transfer_client (TransferClient): An authenticated Transfer client.
+    source_ep (str): The source Globus Endpoint ID.
+    dest_ep (str): The destination Globus Endpoint ID.
+    path_list (list of tuple of 2 str): A list of tuples containing the paths to transfer as
+                                        (source, destination).
+        Directory paths must end in a slash, and file paths must not.
+        Example: [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
+                  ("/source/all_reports/", "/dest/reports/")]
+    interval (int): Number of seconds to wait before polling Transfer status.
+                    Default DEFAULT_INTERVAL. Minimum 1.
+    retries (int): The number of errors to tolerate before cancelling the task.
+                   Globus Transfer makes no distinction between
+                   hard errors (e.g. "permission denied")
+                   and soft errors (e.g. "endpoint [temporarily] too busy")
+                   so requiring retries is not uncommon for large Transfers.
+                   -1 for infinite tries (Transfer still fails after a period of no activity).
+                   None is synonymous with 0.
+                   Default 10.
+
+    Returns:
+    str: ID of the Globus Transfer.
+    """
+    if retries is None:
+        retries = 0
+    iterations = 0
+
+    transfer = custom_transfer(transfer_client, source_ep, dest_ep, path_list)
+    res = next(transfer)
+    while True:
+        if iterations < retries or retries == -1:
+            try:
+                res = transfer.send(True)
+                iterations += 1
+            except StopIteration:
+                break
+        else:
+            try:
+                res = transfer.send(False)
+            except StopIteration:
+                break
+    if res["success"]:
+        error = "No error"
+    else:
+        error = "{}: {}".format(res.get("fatal_error", {}).get("code", "Error"),
+                                res.get("fatal_error", {}).get("description", "Unknown"))
+    return {
+        "success": res["success"],
+        "task_id": res["task_id"],
+        "error": error
+    }
 
 
 def get_local_ep(transfer_client):
