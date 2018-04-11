@@ -784,8 +784,8 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
 
     error_timestamps = set()
     # while Transfer is active
-    while not transfer_client.task_wait(res["task_id"], timeout=interval,
-                                                        polling_interval=interval):
+    while not transfer_client.task_wait(res["task_id"],
+                                        timeout=interval, polling_interval=interval):
         for event in transfer_client.task_event_list(res["task_id"]):
             # Only process error events that have not been presented to the user
             # Events do not have UUIDs, so if there are multiple simultaneous errors
