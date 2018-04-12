@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 import gzip
 import json
 import os
@@ -40,7 +40,7 @@ CONNECT_DEV_LOC = "https://34.193.81.207:5000"
 CONNECT_CONVERT_ROUTE = "/convert"
 CONNECT_STATUS_ROUTE = "/status/"
 DEFAULT_INTERVAL = 5 * 60  # 5 minutes, in seconds
-DEFAULT_INACTIVITY_TIME = 3 * 60 * 60  # 3 hours, in seconds
+DEFAULT_INACTIVITY_TIME = 1 * 24 * 60 * 60  # 1 day, in seconds
 
 
 # *************************************************
@@ -763,7 +763,7 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
     """
     if interval < 1:
         interval = 1
-    deadline = datetime.fromtimestamp(int(time.time()) + inactivity_time, timezone.utc)
+    deadline = datetime.utcfromtimestamp(int(time.time()) + inactivity_time)
     tdata = globus_sdk.TransferData(transfer_client, source_ep, dest_ep,
                                     deadline=deadline, verify_checksum=True)
     for item in path_list:
@@ -802,8 +802,7 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
                     break
             # If progress has been made, move deadline forward
             elif event["code"] == "PROGRESS":
-                new_deadline = datetime.fromtimestamp(int(time.time()) + inactivity_time,
-                                                      timezone.utc)
+                new_deadline = datetime.utcfromtimestamp(int(time.time()) + inactivity_time)
                 transfer_client.update_task(res["task_id"], {"deadline": new_deadline})
     # Transfer is no longer active; now check if succeeded
     task = transfer_client.get_task(res["task_id"]).data
