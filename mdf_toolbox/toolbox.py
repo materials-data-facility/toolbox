@@ -761,6 +761,10 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
           False: Cancel the Transfer
           Default True
     """
+    # TODO: (LW) Handle transfers with huge number of files
+    # If a TransferData object is too large, Globus might timeout
+    #   before it can be completely uploaded.
+    # So, we need to be able to check the size of the TD object and, if need be, send it early.
     if interval < 1:
         interval = 1
     deadline = datetime.utcfromtimestamp(int(time.time()) + inactivity_time)
@@ -795,18 +799,28 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
                 ret_event = event.data
                 # yield value should always have success: bool
                 ret_event["success"] = False
+                ret_event["finished"] = False
                 # User can cancel Transfer with .send(False)
                 cont = yield ret_event
                 if cont is False:
                     transfer_client.cancel_task(res["task_id"])
+                    # Wait until Transfer is no longer active after cancellation
+                    while not transfer_client.task_wait(res["task_id"],
+                                                        timeout=1, polling_interval=1):
+                        pass
                     break
             # If progress has been made, move deadline forward
             elif event["code"] == "PROGRESS":
                 new_deadline = datetime.utcfromtimestamp(int(time.time()) + inactivity_time)
-                transfer_client.update_task(res["task_id"], {"deadline": new_deadline})
+                new_doc = {
+                    "DATA_TYPE": "task",
+                    "deadline": str(new_deadline)
+                }
+                transfer_client.update_task(res["task_id"], new_doc)
     # Transfer is no longer active; now check if succeeded
     task = transfer_client.get_task(res["task_id"]).data
     task["success"] = (task["status"] == "SUCCEEDED")
+    task["finished"] = True
     yield task
 
 
@@ -842,18 +856,16 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None
 
     transfer = custom_transfer(transfer_client, source_ep, dest_ep, path_list)
     res = next(transfer)
-    while True:
-        if iterations < retries or retries == -1:
-            try:
+    try:
+        # Loop ends on StopIteration from generator exhaustion
+        while True:
+            if iterations < retries or retries == -1:
                 res = transfer.send(True)
                 iterations += 1
-            except StopIteration:
-                break
-        else:
-            try:
+            else:
                 res = transfer.send(False)
-            except StopIteration:
-                break
+    except StopIteration:
+        pass
     if res["success"]:
         error = "No error"
     else:
