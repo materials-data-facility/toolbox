@@ -1,11 +1,12 @@
+import builtins
 from copy import deepcopy
-import os
 import json
-import pytest
+import os
+
 from globus_nexus_client import NexusClient
 import globus_sdk
 import mdf_toolbox
-
+import pytest
 
 credentials = {
     "app_name": "MDF_Forge",
@@ -13,7 +14,7 @@ credentials = {
     }
 
 
-def test_login(capsys):
+def test_login(capsys, monkeypatch):
     # Login works
     creds1 = deepcopy(credentials)
     creds1["services"] = ["search"]
@@ -42,8 +43,6 @@ def test_login(capsys):
     # Error on bad creds
     with pytest.raises(ValueError):
         mdf_toolbox.login("nope")
-    with pytest.raises(ValueError):
-        mdf_toolbox.login()
 
     # Error on bad services
     creds4 = deepcopy(credentials)
@@ -54,6 +53,9 @@ def test_login(capsys):
     assert "Unknown or invalid service: 'invalid'." in out
 
     # TODO: Test user input prompt
+    # monkeypatch.setattr(mdf_toolbox, "input", (lambda x=None: "invalid"))
+    # with pytest.raises(ValueError):
+    #    mdf_toolbox.login()
 
 
 def test_confidential_login():
