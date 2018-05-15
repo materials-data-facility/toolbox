@@ -168,6 +168,14 @@ def test_set_acl():
     }
 
 
+def test_set_source_name():
+    mdf = MDFConnectClient()
+    mdf.set_source_name("foo")
+    assert mdf.mdf == {
+        "source_name": "foo"
+    }
+
+
 def test_create_mrr_block():
     # TODO: Update after helper is helpful
     mdf = MDFConnectClient()
@@ -234,12 +242,12 @@ def test_index():
 def test_services():
     mdf = MDFConnectClient()
     # No parameters
-    mdf.add_services("citrine")
+    mdf.add_service("citrine")
     assert mdf.services == {
         "citrine": True
     }
     # With parameters
-    mdf.add_services("globus_publish", parameters={"collection_id": 5555})
+    mdf.add_service("globus_publish", parameters={"collection_id": 5555})
     assert mdf.services == {
         "citrine": True,
         "globus_publish": {
@@ -247,7 +255,7 @@ def test_services():
         }
     }
     # Cancelling
-    mdf.add_services("citrine", False)
+    mdf.add_service("citrine", False)
     assert mdf.services == {
         "citrine": False,
         "globus_publish": {

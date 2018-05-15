@@ -1,11 +1,11 @@
 from copy import deepcopy
-import os
 import json
-import pytest
+import os
+
 from globus_nexus_client import NexusClient
 import globus_sdk
 import mdf_toolbox
-
+import pytest
 
 credentials = {
     "app_name": "MDF_Forge",
@@ -13,7 +13,7 @@ credentials = {
     }
 
 
-def test_login(capsys):
+def test_login(capsys, monkeypatch):
     # Login works
     creds1 = deepcopy(credentials)
     creds1["services"] = ["search"]
@@ -42,8 +42,6 @@ def test_login(capsys):
     # Error on bad creds
     with pytest.raises(ValueError):
         mdf_toolbox.login("nope")
-    with pytest.raises(ValueError):
-        mdf_toolbox.login()
 
     # Error on bad services
     creds4 = deepcopy(credentials)
@@ -54,6 +52,9 @@ def test_login(capsys):
     assert "Unknown or invalid service: 'invalid'." in out
 
     # TODO: Test user input prompt
+    # monkeypatch.setattr(mdf_toolbox, "input", (lambda x=None: "invalid"))
+    # with pytest.raises(ValueError):
+    #    mdf_toolbox.login()
 
 
 def test_confidential_login():
@@ -157,14 +158,14 @@ def test_format_gmeta():
     md1 = {
         "mdf": {
             "acl": ["public"],
-            "mdf_id": "123"
+            "mdf_id": "123",
+            "data": "some"
             }
         }
     # More complex GMetaEntry
     md2 = {
         "mdf": {
                 "title": "test",
-                "acl": ["public"],
                 "source_name": "source name",
                 "citation": ["abc"],
                 "data_contact": {
@@ -190,24 +191,25 @@ def test_format_gmeta():
     }
 
     # Format both
-    gme1 = mdf_toolbox.format_gmeta(md1)
+    gme1 = mdf_toolbox.format_gmeta(md1, md1["mdf"].pop("acl"), md1["mdf"]["mdf_id"])
     assert gme1 == {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": "https://materialsdatafacility.org/data/123/123",
+            "subject": "123",
             "visible_to": ["public"],
             "content": {
                 "mdf": {
-                    "mdf_id": "123"
+                    "mdf_id": "123",
+                    "data": "some"
                 }
             }
         }
-    gme2 = mdf_toolbox.format_gmeta(md2)
+    gme2 = mdf_toolbox.format_gmeta(md2, ["ABCD"], "https://example.com/123456")
     assert gme2 == {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": "https://materialsdatafacility.org/data/000/123",
-            "visible_to": ["public"],
+            "subject": "https://example.com/123456",
+            "visible_to": ["ABCD"],
             "content": {
                 "mdf": {
                     "title": "test",

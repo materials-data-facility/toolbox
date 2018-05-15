@@ -4,7 +4,6 @@ import json
 import os
 import re
 import requests
-import sys
 import tarfile
 import time
 import zipfile
@@ -16,6 +15,7 @@ from globus_sdk.response import GlobusHTTPResponse
 from tqdm import tqdm
 
 from six import print_
+from six.moves import input
 
 AUTH_SCOPES = {
     "transfer": "urn:globus:auth:scope:transfer.api.globus.org:all",
@@ -29,6 +29,9 @@ AUTH_SCOPES = {
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups"
 }
+LOGIN_CLIENTS = {
+    "transfer": globus_sdk.TransferClient
+}
 SEARCH_INDEX_UUIDS = {
     "mdf": "1a57bbe5-5272-477f-9d31-343b8258b7a5",
     "mdf-test": "5acded0c-a534-45af-84be-dcf042e36412",
@@ -39,7 +42,7 @@ CONNECT_SERVICE_LOC = "https://18.233.85.14:5000"
 CONNECT_DEV_LOC = "https://34.193.81.207:5000"
 CONNECT_CONVERT_ROUTE = "/convert"
 CONNECT_STATUS_ROUTE = "/status/"
-DEFAULT_INTERVAL = 5 * 60  # 5 minutes, in seconds
+DEFAULT_INTERVAL = 1 * 60  # 1 minute, in seconds
 DEFAULT_INACTIVITY_TIME = 1 * 24 * 60 * 60  # 1 day, in seconds
 
 
@@ -47,19 +50,22 @@ DEFAULT_INACTIVITY_TIME = 1 * 24 * 60 * 60  # 1 day, in seconds
 # * Authentication utilities
 # *************************************************
 
-def login(credentials=None, clear_old_tokens=False, **kwargs):
+def login(credentials=None, app_name=None, services=None, client_id=None,
+          clear_old_tokens=False, **kwargs):
     """Login to Globus services
 
     Arguments:
     credentials (str or dict): A string filename, string JSON, or dictionary
                                    with credential and config information.
                                By default, looks in ~/mdf/credentials/globus_login.json.
-        Contains:
-        app_name (str): Name of script/client. This will form the name of the token cache file.
-        services (list of str): Services to authenticate with.
-                                Services are listed in AUTH_SCOPES.
-        client_id (str): The ID of the client, given when registered with Globus.
-                         Default is the MDF Native Clients ID.
+                               Contains app_name, services, and client_id as described below.
+    app_name (str): Name of script/client. This will form the name of the token cache file.
+                    Default 'UNKNOWN'.
+    services (list of str): Services to authenticate with.
+                            Services are listed in AUTH_SCOPES.
+                            Default [].
+    client_id (str): The ID of the client, given when registered with Globus.
+                     Default is the MDF Native Clients ID.
     clear_old_tokens (bool): If True, delete old token file if it exists, forcing user to re-login.
                              If False, use existing token file if there is one.
                              Default False.
@@ -124,9 +130,8 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
                 token_response = client.oauth2_exchange_code_for_tokens(auth_code)
             except globus_sdk.GlobusAPIError as e:
                 if e.http_status == 401:
-                    print_("\nSorry, that code isn't valid."
-                           " You can try again, or contact support.")
-                    sys.exit(1)
+                    raise ValueError("\nSorry, that code isn't valid."
+                                     " You can try again, or contact support.")
                 else:
                     raise
             tokens = token_response.by_resource_server
@@ -138,38 +143,49 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
 
         return tokens
 
-    if type(credentials) is str:
-        try:
-            with open(credentials) as cred_file:
-                creds = json.load(cred_file)
-        except IOError:
+    # If creds supplied in 'credentials', process
+    if credentials:
+        if type(credentials) is str:
             try:
-                creds = json.loads(credentials)
-            except ValueError:
-                raise ValueError("Credential string unreadable")
-    elif type(credentials) is dict:
-        creds = credentials
-    else:
-        try:
-            with open(os.path.join(os.getcwd(), DEFAULT_CRED_FILENAME)) as cred_file:
-                creds = json.load(cred_file)
-        except IOError:
-            try:
-                with open(os.path.join(DEFAULT_CRED_PATH, DEFAULT_CRED_FILENAME)) as cred_file:
+                with open(credentials) as cred_file:
                     creds = json.load(cred_file)
             except IOError:
-                raise ValueError("Credentials/configuration must be passed as a "
-                                 + "filename string, JSON string, or dictionary, or provided in '"
-                                 + DEFAULT_CRED_FILENAME
-                                 + "' or '"
-                                 + DEFAULT_CRED_PATH
-                                 + "'.")
+                try:
+                    creds = json.loads(credentials)
+                except ValueError:
+                    raise ValueError("Credential string unreadable")
+        elif type(credentials) is dict:
+            creds = credentials
+        else:
+            try:
+                with open(os.path.join(os.getcwd(), DEFAULT_CRED_FILENAME)) as cred_file:
+                    creds = json.load(cred_file)
+            except IOError:
+                try:
+                    with open(os.path.join(DEFAULT_CRED_PATH, DEFAULT_CRED_FILENAME)) as cred_file:
+                        creds = json.load(cred_file)
+                except IOError:
+                    raise ValueError("Credentials/configuration must be passed as a "
+                                     + "filename string, JSON string, or dictionary, "
+                                     + "or provided in '"
+                                     + DEFAULT_CRED_FILENAME
+                                     + "' or '"
+                                     + DEFAULT_CRED_PATH
+                                     + "'.")
+        app_name = creds.get("app_name")
+        services = creds.get("services")
+        client_id = creds.get("client_id")
+    if not app_name:
+        app_name = "UNKNOWN"
+    if not services:
+        services = []
+    if not client_id:
+        client_id = NATIVE_CLIENT_ID
 
-    native_client = globus_sdk.NativeAppAuthClient(creds.get("client_id", NATIVE_CLIENT_ID),
-                                                   app_name=creds.get("app_name", "unknown"))
+    native_client = globus_sdk.NativeAppAuthClient(client_id, app_name=app_name)
 
     servs = []
-    for serv in creds.get("services", []):
+    for serv in services:
         serv = serv.lower().strip()
         if type(serv) is str:
             servs += serv.split(" ")
@@ -178,8 +194,7 @@ def login(credentials=None, clear_old_tokens=False, **kwargs):
     # Translate services into scopes, pass bad/unknown services
     scopes = " ".join([AUTH_SCOPES.get(sc, "") for sc in servs])
 
-    all_tokens = _get_tokens(native_client, scopes, creds.get("app_name", "unknown"),
-                             force_refresh=clear_old_tokens)
+    all_tokens = _get_tokens(native_client, scopes, app_name, force_refresh=clear_old_tokens)
 
     clients = {}
     if "transfer" in servs:
@@ -622,7 +637,7 @@ def uncompress_tree(root, verbose=False):
 # * Globus Search utilities
 # *************************************************
 
-def format_gmeta(data):
+def format_gmeta(data, acl=None, identifier=None):
     """Format input into GMeta format, suitable for ingesting into Globus Search.
     Format a dictionary into a GMetaEntry.
     Format a list of GMetaEntry into a GMetaList inside a GMetaIngest.
@@ -630,33 +645,39 @@ def format_gmeta(data):
     Example usage:
         glist = []
         for document in all_my_documents:
-            gmeta_entry = format_gmeta(document)
+            gmeta_entry = format_gmeta(document, ["public"], document["id"])
             glist.append(gmeta_entry)
         ingest_ready_document = format_gmeta(glist)
 
     Arguments:
     data (dict or list): The data to be formatted.
-        If data is a dict, it must contain:
-        data["mdf"]["mdf_id"] (str): A unique identifier.
-        data["mdf"]["acl"] (list of str): A list of Globus UUIDs that are allowed to view the entry.
+        If data is a dict, arguments acl and id1 are required.
         If data is a list, it must consist of GMetaEntry documents.
+    acl (list of str): The list of Globus UUIDs allowed to view the document,
+                       or the special value ["public"] to allow anyone access.
+                       Required if data is a dict. Ignored if data is a list.
+    identifier (str): A unique identifier for this document. If this value is not unique,
+                      ingests into Globus Search may merge entries.
+                      Required is data is a dict. Ignored if data is a list.
 
     Returns:
     dict (if data is dict): The data as a GMetaEntry.
     dict (if data is list): The data as a GMetaIngest.
     """
-    if type(data) is dict:
+    if isinstance(data, dict):
+        if acl is None or identifier is None:
+            raise ValueError("acl and identifier are required when formatting a GMetaEntry.")
+        if isinstance(acl, str):
+            acl = [acl]
         return {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": ("https://materialsdatafacility.org/data/{}/{}"
-                        .format(data["mdf"].get("parent_id", data["mdf"]["mdf_id"]),
-                                data["mdf"]["mdf_id"])),
-            "visible_to": data["mdf"].pop("acl"),
+            "subject": identifier,
+            "visible_to": acl,
             "content": data
             }
 
-    elif type(data) is list:
+    elif isinstance(data, list):
         return {
             "@datatype": "GIngest",
             "@version": "2016-11-09",
@@ -1017,7 +1038,7 @@ class MDFConnectClient:
         self.convert_route = CONNECT_CONVERT_ROUTE
         self.status_route = CONNECT_STATUS_ROUTE
 
-        self.source_name = None
+        self.source_id = None
 
         if any([isinstance(authorizer, allowed) for allowed in self.__allowed_authorizers]):
             self.__authorizer = authorizer
@@ -1179,16 +1200,27 @@ class MDFConnectClient:
 
         Arguments:
         acl (str or list of str): The Globus UUIDs of users or groups that
-                                  should be granted acces to the dataset.
+                                  should be granted access to the dataset.
                                   The default is special keyword "public"
                                   that makes the dataset visible to everyone.
         """
         if not isinstance(acl, list):
             acl = [acl]
-        mdf = {
-            "acl": acl
-        }
-        self.mdf = mdf
+        self.mdf["acl"] = acl
+
+    def set_source_name(self, source_name):
+        """Set the source name for your dataset.
+
+        Arguments:
+        source_name (str): The desired source name. Must be unique for new datasets.
+                           Please note that your source name will be cleaned
+                           when submitted to Connect,
+                           so the actual source_name may differ from this value.
+                           Additionally, the source_id (which is the source_name plus version)
+                           is required to fetch the status of a submission.
+                           .check_status() can handle this for you.
+        """
+        self.mdf["source_name"] = source_name
 
     def create_mrr_block(self, mrr_data):
         """Create the mrr block for your dataset.
@@ -1274,7 +1306,7 @@ class MDFConnectClient:
         """Clear all indexing instructions set so far."""
         self.index = {}
 
-    def add_services(self, service, parameters=None):
+    def add_service(self, service, parameters=None):
         """Add a service for data submission.
 
         Arguments:
@@ -1308,7 +1340,7 @@ class MDFConnectClient:
         """
         self.test = test
 
-    def submit_dataset(self, test=False, resubmit=False):
+    def submit_dataset(self, test=False, resubmit=False, submission=None):
         """Submit your dataset to MDF Connect for processing.
 
         Arguments:
@@ -1317,36 +1349,45 @@ class MDFConnectClient:
                      you do not need to use this argument.
         resubmit (bool): If you wish to submit this dataset again, set this to True.
                          If this is the first submission, leave this False.
+        submission (dict): If you have assembled the Connect metadata yourself,
+                           you can submit it here. This argument supersedes any data
+                           set through other methods.
+                           Default None, to use method-assembled data.
 
         Returns:
-        str: The source_name of your dataset. This is also saved in self.source_name.
+        str: The source_id of your dataset. This is also saved in self.source_id.
+             The source_id is the source_name plus the version.
+             In other words, source_name is unique to your dataset,
+             and sourc_id is unique to your submission of the dataset.
         """
         # Ensure resubmit matches reality
-        if not resubmit and self.source_name:
+        if not resubmit and self.source_id:
             print_("You have already submitted this dataset.")
             return None
-        elif resubmit and not self.source_name:
+        elif resubmit and not self.source_id:
             print_("You have not already submitted this dataset.")
             return None
-        # Check for data
-        if not self.dc or not self.data:
-            print_("You must populate the dc and data blocks before submission.")
-            return None
-        submission = {
-            "dc": self.dc,
-            "data": self.data,
-            "test": self.test or test
-        }
-        if self.mdf:
-            submission["mdf"] = self.mdf
-        if self.mrr:
-            submission["mrr"] = self.mrr
-        if self.custom:
-            submission["__custom"] - self.custom
-        if self.index:
-            submission["index"] = self.index
-        if self.services:
-            submission["services"] = self.services
+
+        if not submission:
+            # Check for required data
+            if not self.dc or not self.data:
+                print_("You must populate the dc and data blocks before submission.")
+                return None
+            submission = {
+                "dc": self.dc,
+                "data": self.data,
+                "test": self.test or test
+            }
+            if self.mdf:
+                submission["mdf"] = self.mdf
+            if self.mrr:
+                submission["mrr"] = self.mrr
+            if self.custom:
+                submission["__custom"] - self.custom
+            if self.index:
+                submission["index"] = self.index
+            if self.services:
+                submission["services"] = self.services
 
         headers = {}
         self.__authorizer.set_authorization_header(headers)
@@ -1360,18 +1401,19 @@ class MDFConnectClient:
             print_("Error decoding {} response: {}".format(res.status_code, res.content))
         else:
             if res.status_code < 300:
-                self.source_name = json_res["source_name"]
+                self.source_id = json_res["source_id"]
             else:
                 print_("Error {} submitting dataset: {}".format(res.status_code, json_res))
 
-        return self.source_name
+        return self.source_id
 
-    def check_status(self, source_name=None, raw=False):
+    def check_status(self, source_id=None, raw=False):
         """Check the status of your submission.
         You may only check the status of your own submissions.
 
         Arguments:
-        source_name (str): The source_name of the submitted dataset. Default self.source_name.
+        source_id (str): The source_id (source_name + version) of the submitted dataset.
+                         Default self.source_id.
         raw (bool): When False, will print a nicely-formatted status summary.
                     When True, will return the full status result.
                     For direct human consumption, False is recommended. Default False.
@@ -1379,12 +1421,12 @@ class MDFConnectClient:
         Returns:
         If raw is True, dict: The full status.
         """
-        if not source_name and not self.source_name:
+        if not source_id and not self.source_id:
             print_("Error: No dataset submitted")
             return None
         headers = {}
         self.__authorizer.set_authorization_header(headers)
-        res = requests.get(self.service_loc+self.status_route+(source_name or self.source_name),
+        res = requests.get(self.service_loc+self.status_route+(source_id or self.source_id),
                            headers=headers,
                            # TODO: Remove after cert in place
                            verify=False)
