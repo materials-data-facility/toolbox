@@ -637,7 +637,7 @@ def uncompress_tree(root, verbose=False):
 # * Globus Search utilities
 # *************************************************
 
-def format_gmeta(data):
+def format_gmeta(data, acl=None, identifier=None):
     """Format input into GMeta format, suitable for ingesting into Globus Search.
     Format a dictionary into a GMetaEntry.
     Format a list of GMetaEntry into a GMetaList inside a GMetaIngest.
@@ -645,33 +645,39 @@ def format_gmeta(data):
     Example usage:
         glist = []
         for document in all_my_documents:
-            gmeta_entry = format_gmeta(document)
+            gmeta_entry = format_gmeta(document, ["public"], document["id"])
             glist.append(gmeta_entry)
         ingest_ready_document = format_gmeta(glist)
 
     Arguments:
     data (dict or list): The data to be formatted.
-        If data is a dict, it must contain:
-        data["mdf"]["mdf_id"] (str): A unique identifier.
-        data["mdf"]["acl"] (list of str): A list of Globus UUIDs that are allowed to view the entry.
+        If data is a dict, arguments acl and id1 are required.
         If data is a list, it must consist of GMetaEntry documents.
+    acl (list of str): The list of Globus UUIDs allowed to view the document,
+                       or the special value ["public"] to allow anyone access.
+                       Required if data is a dict. Ignored if data is a list.
+    identifier (str): A unique identifier for this document. If this value is not unique,
+                      ingests into Globus Search may merge entries.
+                      Required is data is a dict. Ignored if data is a list.
 
     Returns:
     dict (if data is dict): The data as a GMetaEntry.
     dict (if data is list): The data as a GMetaIngest.
     """
-    if type(data) is dict:
+    if isinstance(data, dict):
+        if acl is None or identifier is None:
+            raise ValueError("acl and identifier are required when formatting a GMetaEntry.")
+        if isinstance(acl, str):
+            acl = [acl]
         return {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": ("https://materialsdatafacility.org/data/{}/{}"
-                        .format(data["mdf"].get("parent_id", data["mdf"]["mdf_id"]),
-                                data["mdf"]["mdf_id"])),
-            "visible_to": data["mdf"].pop("acl"),
+            "subject": identifier,
+            "visible_to": acl,
             "content": data
             }
 
-    elif type(data) is list:
+    elif isinstance(data, list):
         return {
             "@datatype": "GIngest",
             "@version": "2016-11-09",
@@ -1032,7 +1038,7 @@ class MDFConnectClient:
         self.convert_route = CONNECT_CONVERT_ROUTE
         self.status_route = CONNECT_STATUS_ROUTE
 
-        self.source_name = None
+        self.source_id = None
 
         if any([isinstance(authorizer, allowed) for allowed in self.__allowed_authorizers]):
             self.__authorizer = authorizer
@@ -1208,8 +1214,11 @@ class MDFConnectClient:
         Arguments:
         source_name (str): The desired source name. Must be unique for new datasets.
                            Please note that your source name will be cleaned
-                           and versioned when submitted to Connect,
+                           when submitted to Connect,
                            so the actual source_name may differ from this value.
+                           Additionally, the source_id (which is the source_name plus version)
+                           is required to fetch the status of a submission.
+                           .check_status() can handle this for you.
         """
         self.mdf["source_name"] = source_name
 
@@ -1346,13 +1355,16 @@ class MDFConnectClient:
                            Default None, to use method-assembled data.
 
         Returns:
-        str: The source_name of your dataset. This is also saved in self.source_name.
+        str: The source_id of your dataset. This is also saved in self.source_id.
+             The source_id is the source_name plus the version.
+             In other words, source_name is unique to your dataset,
+             and sourc_id is unique to your submission of the dataset.
         """
         # Ensure resubmit matches reality
-        if not resubmit and self.source_name:
+        if not resubmit and self.source_id:
             print_("You have already submitted this dataset.")
             return None
-        elif resubmit and not self.source_name:
+        elif resubmit and not self.source_id:
             print_("You have not already submitted this dataset.")
             return None
 
@@ -1389,18 +1401,19 @@ class MDFConnectClient:
             print_("Error decoding {} response: {}".format(res.status_code, res.content))
         else:
             if res.status_code < 300:
-                self.source_name = json_res["source_name"]
+                self.source_id = json_res["source_id"]
             else:
                 print_("Error {} submitting dataset: {}".format(res.status_code, json_res))
 
-        return self.source_name
+        return self.source_id
 
-    def check_status(self, source_name=None, raw=False):
+    def check_status(self, source_id=None, raw=False):
         """Check the status of your submission.
         You may only check the status of your own submissions.
 
         Arguments:
-        source_name (str): The source_name of the submitted dataset. Default self.source_name.
+        source_id (str): The source_id (source_name + version) of the submitted dataset.
+                         Default self.source_id.
         raw (bool): When False, will print a nicely-formatted status summary.
                     When True, will return the full status result.
                     For direct human consumption, False is recommended. Default False.
@@ -1408,12 +1421,12 @@ class MDFConnectClient:
         Returns:
         If raw is True, dict: The full status.
         """
-        if not source_name and not self.source_name:
+        if not source_id and not self.source_id:
             print_("Error: No dataset submitted")
             return None
         headers = {}
         self.__authorizer.set_authorization_header(headers)
-        res = requests.get(self.service_loc+self.status_route+(source_name or self.source_name),
+        res = requests.get(self.service_loc+self.status_route+(source_id or self.source_id),
                            headers=headers,
                            # TODO: Remove after cert in place
                            verify=False)
