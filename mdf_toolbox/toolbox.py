@@ -29,7 +29,7 @@ AUTH_SCOPES = {
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups"
 }
-LOGIN_CLIENTS: {
+LOGIN_CLIENTS = {
     "transfer": globus_sdk.TransferClient
 }
 SEARCH_INDEX_UUIDS = {
