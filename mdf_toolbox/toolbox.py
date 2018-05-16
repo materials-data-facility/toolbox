@@ -1208,6 +1208,10 @@ class MDFConnectClient:
             acl = [acl]
         self.mdf["acl"] = acl
 
+    def clear_acl(self):
+        """Reset the ACL of your dataset to the default value ["public"]."""
+        self.mdf.pop("acl", None)
+
     def set_source_name(self, source_name):
         """Set the source name for your dataset.
 
@@ -1221,6 +1225,30 @@ class MDFConnectClient:
                            .check_status() can handle this for you.
         """
         self.mdf["source_name"] = source_name
+
+    def clear_source_name(self):
+        """Remove a previously set source_name."""
+        self.mdf.pop("source_name", None)
+
+    def add_repositories(self, repositories):
+        """Add repositories to your dataset.
+
+        Arguments:
+        repositories (str or list of str): The repository or repositories to add.
+                                           If the repository is not known to MDF, it will
+                                           be discarded.
+                                           Additional repositories may be added automatically.
+        """
+        if not isinstance(repositories, list):
+            repositories = [repositories]
+        if not self.mdf.get("repositories"):
+            self.mdf["repositories"] = repositories
+        else:
+            self.mdf["repositories"].extend(repositories)
+
+    def clear_repositories(self):
+        """Clear all added repositories from the submission."""
+        self.mdf.pop("repositories", None)
 
     def create_mrr_block(self, mrr_data):
         """Create the mrr block for your dataset.
@@ -1340,7 +1368,55 @@ class MDFConnectClient:
         """
         self.test = test
 
-    def submit_dataset(self, test=False, resubmit=False, submission=None):
+    def get_submission(self):
+        """Fetch the current state of your submission.
+
+        Returns:
+        dict: Your submission.
+        """
+        submission = {
+            "dc": self.dc,
+            "data": self.data,
+            "test": self.test
+        }
+        if self.mdf:
+            submission["mdf"] = self.mdf
+        if self.mrr:
+            submission["mrr"] = self.mrr
+        if self.custom:
+            submission["__custom"] - self.custom
+        if self.index:
+            submission["index"] = self.index
+        if self.services:
+            submission["services"] = self.services
+        return submission
+
+    def reset_submission(self):
+        """Completely clear all metadata from your submission.
+        This action cannot be undone.
+        The last submission's source_id will also be cleared. If you want to use check_status,
+        you will be required to input the source_id manually.
+
+        Returns:
+        dict: The variables that are NOT cleared, including:
+            test
+            service_location
+        """
+        self.dc = {}
+        self.mdf = {}
+        self.mrr = {}
+        self.custom = {}
+        self.clear_data()
+        self.clear_index()
+        self.clear_services()
+        self.source_id = None
+
+        return {
+            "test": self.test,
+            "service_location": self.service_loc
+        }
+
+    def submit_dataset(self, test=False, resubmit=False, submission=None, reset=False):
         """Submit your dataset to MDF Connect for processing.
 
         Arguments:
@@ -1353,12 +1429,18 @@ class MDFConnectClient:
                            you can submit it here. This argument supersedes any data
                            set through other methods.
                            Default None, to use method-assembled data.
+        reset (bool): If True, will clear the old submission. The test flag will be preserved.
+                      IMPORTANT: The source_id of the submission will not be saved if
+                                 this argument is True. check_status will require you to
+                                 pass the source_id as an argument.
+                      If False, the submission will be preserved.
+                      Default False.
 
         Returns:
         str: The source_id of your dataset. This is also saved in self.source_id.
              The source_id is the source_name plus the version.
              In other words, source_name is unique to your dataset,
-             and sourc_id is unique to your submission of the dataset.
+             and source_id is unique to your submission of the dataset.
         """
         # Ensure resubmit matches reality
         if not resubmit and self.source_id:
@@ -1369,25 +1451,12 @@ class MDFConnectClient:
             return None
 
         if not submission:
-            # Check for required data
-            if not self.dc or not self.data:
-                print_("You must populate the dc and data blocks before submission.")
-                return None
-            submission = {
-                "dc": self.dc,
-                "data": self.data,
-                "test": self.test or test
-            }
-            if self.mdf:
-                submission["mdf"] = self.mdf
-            if self.mrr:
-                submission["mrr"] = self.mrr
-            if self.custom:
-                submission["__custom"] - self.custom
-            if self.index:
-                submission["index"] = self.index
-            if self.services:
-                submission["services"] = self.services
+            submission = self.get_submission()
+
+        # Check for required data
+        if not submission["dc"] or not submission["data"]:
+            print_("You must populate the dc and data blocks before submission.")
+            return None
 
         headers = {}
         self.__authorizer.set_authorization_header(headers)
@@ -1405,7 +1474,12 @@ class MDFConnectClient:
             else:
                 print_("Error {} submitting dataset: {}".format(res.status_code, json_res))
 
-        return self.source_id
+        if not reset:
+            return self.source_id
+        else:
+            source_id = self.source_id
+            self.reset_submission()
+            return source_id
 
     def check_status(self, source_id=None, raw=False):
         """Check the status of your submission.

@@ -152,7 +152,7 @@ def test_create_dc_block():
     }
 
 
-def test_set_acl():
+def test_acl():
     mdf = MDFConnectClient()
     mdf.set_acl("12345abc")
     assert mdf.mdf == {
@@ -166,14 +166,30 @@ def test_set_acl():
     assert mdf.mdf == {
         "acl": ["public"]
     }
+    mdf.clear_acl()
+    assert mdf.mdf.get("acl", None) is None
 
 
-def test_set_source_name():
+def test_source_name():
     mdf = MDFConnectClient()
     mdf.set_source_name("foo")
     assert mdf.mdf == {
         "source_name": "foo"
     }
+    mdf.clear_source_name()
+    assert mdf.mdf.get("source_name", None) is None
+
+
+def test_repositories():
+    mdf = MDFConnectClient()
+    mdf.add_repositories("ANL")
+    mdf.add_repositories(["ORNL", "NREL"])
+    assert mdf.mdf["repositories"] == ["ANL", "ORNL", "NREL"]
+
+    mdf.clear_repositories()
+    assert mdf.mdf.get("repositories", None) is None
+    mdf.add_repositories("APS")
+    assert mdf.mdf["repositories"] == ["APS"]
 
 
 def test_create_mrr_block():
@@ -276,6 +292,38 @@ def test_set_test():
     assert mdf.test is False
     mdf2 = MDFConnectClient(test=True)
     assert mdf2.test is True
+
+
+def test_submission():
+    mdf = MDFConnectClient()
+    assert mdf.get_submission() == {
+        "dc": {},
+        "data": [],
+        "test": False
+    }
+    mdf.dc = {"a": "a"}
+    mdf.mdf = {"b": "b"}
+    mdf.services = {"c": "c"}
+    assert mdf.get_submission() == {
+        "dc": {"a": "a"},
+        "mdf": {"b": "b"},
+        "services": {"c": "c"},
+        "data": [],
+        "test": False
+    }
+    mdf.reset_submission()
+    assert mdf.get_submission() == {
+        "dc": {},
+        "data": [],
+        "test": False
+    }
+    mdf.set_test(True)
+    mdf.reset_submission()
+    assert mdf.get_submission() == {
+        "dc": {},
+        "data": [],
+        "test": True
+    }
 
 
 def test_submit_dataset():
