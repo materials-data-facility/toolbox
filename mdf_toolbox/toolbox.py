@@ -1,12 +1,10 @@
 from datetime import datetime
-import gzip
 import json
 import os
 import re
 import requests
-import tarfile
+import shutil
 import time
-import zipfile
 
 from globus_nexus_client import NexusClient
 import globus_sdk
@@ -599,38 +597,46 @@ def find_files(root, file_pattern=None, verbose=False):
                     }
 
 
-def uncompress_tree(root, verbose=False):
+def uncompress_tree(root, delete_archives=False):
     """Uncompress all tar, zip, and gzip archives under a given directory.
-    Note that this process tends to be very slow.
+    Archives will be extracted to a sibling directory named after the archive (minus extension).
+    This process can be slow, depending on the number and size of archives.
 
     Arguments:
     root (str): The path to the starting (root) directory.
-    verbose: If True, will print_ status messages.
-             If False, will remain silent unless there is an error.
-             Default False.
+    delete_archives (bool): If True, will delete extracted archive files.
+                            If False, will preserve archive files.
+                            Default False.
+    Returns:
+    dict: Results.
+        success (bool): If the extraction succeeded.
+        num_extracted (int): Number of archives extracted.
     """
-    for file_info in tqdm(find_files(root), desc="Uncompressing files", disable=(not verbose)):
-        dir_path = os.path.abspath(file_info["path"])
-        abs_path = os.path.join(dir_path, file_info["filename"])
-        if tarfile.is_tarfile(abs_path):
-            tar = tarfile.open(abs_path)
-            tar.extractall(dir_path)
-            tar.close()
-        elif zipfile.is_zipfile(abs_path):
-            z = zipfile.ZipFile(abs_path)
-            z.extractall(dir_path)
-            z.close()
-        else:
-            try:
-                with gzip.open(abs_path) as gz:
-                    file_data = gz.read()
-                    # Opens the absolute path, including filename, for writing
-                    # Does not include the extension (should be .gz or similar)
-                    with open(abs_path.rsplit('.', 1)[0], 'w') as newfile:
-                        newfile.write(str(file_data))
-            # An IOErrorwill occur at gz.read() if the file is not a gzip
-            except IOError:
-                pass
+    num_extracted = 0
+    # Start list of dirs to extract with root
+    # Later, add newly-created dirs with extracted files, because os.walk will miss them
+    extract_dirs = [os.path.abspath(root)]
+    while len(extract_dirs) > 0:
+        for path, dirs, files in os.walk(extract_dirs.pop()):
+            for filename in files:
+                try:
+                    # Extract my_archive.tar to sibling dir my_archive
+                    archive_path = os.path.join(path, filename)
+                    extracted_files_dir = os.path.join(path, os.path.splitext(filename)[0])
+                    shutil.unpack_archive(archive_path, extracted_files_dir)
+                except shutil.ReadError:
+                    # ReadError means is not an (extractable) archive
+                    pass
+                else:
+                    num_extracted += 1
+                    # Add new dir to list of dirs to process
+                    extract_dirs.append(extracted_files_dir)
+                    if delete_archives:
+                        os.remove(archive_path)
+    return {
+        "success": True,
+        "num_extracted": num_extracted
+    }
 
 
 # *************************************************

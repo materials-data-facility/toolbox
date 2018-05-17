@@ -1,6 +1,7 @@
 from copy import deepcopy
 import json
 import os
+import shutil
 
 from globus_nexus_client import NexusClient
 import globus_sdk
@@ -147,10 +148,25 @@ def test_find_files():
 
 def test_uncompress_tree():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
+    # Basic test, should extract tar and nested tar, but not delete anything
     mdf_toolbox.uncompress_tree(root)
-    path = os.path.join(root, "toolbox_more", "tlbx_uncompressed.txt")
-    assert os.path.isfile(path)
-    os.remove(path)
+    lv1_txt = os.path.join(root, "toolbox_more", "toolbox_compressed", "tlbx_uncompressed.txt")
+    assert os.path.isfile(lv1_txt)
+    lv2_txt = os.path.join(root, "toolbox_more", "toolbox_compressed", "toolbox_nested",
+                           "tlbx_uncompressed2.txt")
+    assert os.path.isfile(lv2_txt)
+    nested_tar = os.path.join(root, "toolbox_more", "toolbox_compressed", "toolbox_nested.tar")
+    assert os.path.isfile(nested_tar)
+
+    # Test deleting extracted archive
+    shutil.rmtree(os.path.join(root, "toolbox_more", "toolbox_compressed", "toolbox_nested"))
+    mdf_toolbox.uncompress_tree(os.path.join(root, "toolbox_more", "toolbox_compressed"),
+                                delete_archives=True)
+    assert os.path.isfile(lv2_txt)
+    assert not os.path.isfile(nested_tar)
+
+    # Clean up
+    shutil.rmtree(os.path.join(root, "toolbox_more", "toolbox_compressed"))
 
 
 def test_format_gmeta():
