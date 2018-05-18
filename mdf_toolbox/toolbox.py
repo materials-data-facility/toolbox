@@ -4,6 +4,7 @@ import os
 import re
 import requests
 import shutil
+import sys
 import time
 
 from globus_nexus_client import NexusClient
@@ -598,7 +599,8 @@ def find_files(root, file_pattern=None, verbose=False):
 
 
 def uncompress_tree(root, delete_archives=False):
-    """Uncompress all tar, zip, and gzip archives under a given directory.
+    """IMPORTANT: Only compatible with Python 3.
+    Uncompress all tar, zip, and gzip archives under a given directory.
     Archives will be extracted to a sibling directory named after the archive (minus extension).
     This process can be slow, depending on the number and size of archives.
 
@@ -612,6 +614,9 @@ def uncompress_tree(root, delete_archives=False):
         success (bool): If the extraction succeeded.
         num_extracted (int): Number of archives extracted.
     """
+    if sys.version_info.major < 3:
+        raise NotImplementedError("uncompress_tree is only available in Python 3.\n"
+                                  "Please consider upgrading.")
     num_extracted = 0
     # Start list of dirs to extract with root
     # Later, add newly-created dirs with extracted files, because os.walk will miss them

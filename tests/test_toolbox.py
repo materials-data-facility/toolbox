@@ -2,6 +2,7 @@ from copy import deepcopy
 import json
 import os
 import shutil
+import sys
 
 from globus_nexus_client import NexusClient
 import globus_sdk
@@ -146,6 +147,7 @@ def test_find_files():
         next(mdf_toolbox.find_files("/this/is/not/a/valid/path"))
 
 
+@pytest.mark.skipif(sys.version_info.major < 3, reason="Requires Python 3")
 def test_uncompress_tree():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
     # Basic test, should extract tar and nested tar, but not delete anything
