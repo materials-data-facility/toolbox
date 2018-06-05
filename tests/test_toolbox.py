@@ -2,7 +2,6 @@ from copy import deepcopy
 import json
 import os
 import shutil
-import sys
 
 from globus_nexus_client import NexusClient
 import globus_sdk
