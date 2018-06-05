@@ -13,8 +13,6 @@ from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
 from tqdm import tqdm
 
-from six import print_
-from six.moves import input
 
 AUTH_SCOPES = {
     "transfer": "urn:globus:auth:scope:transfer.api.globus.org:all",
@@ -120,8 +118,8 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             client.oauth2_start_flow(requested_scopes=scopes, refresh_tokens=True)
             authorize_url = client.oauth2_get_authorize_url()
 
-            print_("It looks like this is the first time you're accessing this service.",
-                   "\nPlease log in to Globus at this link:\n", authorize_url)
+            print("It looks like this is the first time you're accessing this service.",
+                  "\nPlease log in to Globus at this link:\n", authorize_url)
             auth_code = input("Copy and paste the authorization code here: ").strip()
 
             # Handle 401s
@@ -138,7 +136,7 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             os.umask(0o077)
             with open(token_path, "w") as tf:
                 json.dump(tokens, tf)
-            print_("Thanks! You're now logged in.")
+            print("Thanks! You're now logged in.")
 
         return tokens
 
@@ -204,12 +202,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["transfer"] = globus_sdk.TransferClient(authorizer=transfer_authorizer)
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve Transfer tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve Transfer tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["transfer"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Transfer client (" + e.message + ").")
+            print("Error: Unable to create Transfer client (" + e.message + ").")
             clients["transfer"] = None
         # Remove processed service
         servs.remove("transfer")
@@ -222,12 +220,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["search_ingest"] = globus_sdk.SearchClient(authorizer=ingest_authorizer)
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve Search (ingest) tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve Search (ingest) tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["search_ingest"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Search (ingest) client (" + e.message + ").")
+            print("Error: Unable to create Search (ingest) client (" + e.message + ").")
             clients["search_ingest"] = None
         # Remove processed service
         servs.remove("search_ingest")
@@ -245,12 +243,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["search"] = globus_sdk.SearchClient(authorizer=search_authorizer)
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve Search tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve Search tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["search"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Search client (" + e.message + ").")
+            print("Error: Unable to create Search client (" + e.message + ").")
             clients["search"] = None
         # Remove processed service
         servs.remove("search")
@@ -263,12 +261,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["data_mdf"] = mdf_authorizer
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve MDF/NCSA tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve MDF/NCSA tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["data_mdf"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF/NCSA Authorizer (" + e.message + ").")
+            print("Error: Unable to create MDF/NCSA Authorizer (" + e.message + ").")
             clients["data_mdf"] = None
         # Remove processed service
         servs.remove("data_mdf")
@@ -281,12 +279,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["publish"] = DataPublicationClient(authorizer=publish_authorizer)
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve Publish tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve Publish tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["publish"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Publish client (" + e.message + ").")
+            print("Error: Unable to create Publish client (" + e.message + ").")
             clients["publish"] = None
         # Remove processed service
         servs.remove("publish")
@@ -299,12 +297,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["connect"] = mdf_authorizer
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve MDF Connect tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve MDF Connect tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["connect"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF Connect Authorizer (" + e.message + ").")
+            print("Error: Unable to create MDF Connect Authorizer (" + e.message + ").")
             clients["connect"] = None
         # Remove processed service
         servs.remove("connect")
@@ -317,12 +315,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["mdf_connect"] = MDFConnectClient(authorizer=mdf_authorizer)
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve MDF Connect tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve MDF Connect tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["mdf_connect"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF Connect Client (" + e.message + ").")
+            print("Error: Unable to create MDF Connect Client (" + e.message + ").")
             clients["mdf_connect"] = None
         # Remove processed service
         servs.remove("mdf_connect")
@@ -335,12 +333,12 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["petrel"] = mdf_authorizer
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve MDF/Petrel tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve MDF/Petrel tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["petrel"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF/Petrel Authorizer (" + e.message + ").")
+            print("Error: Unable to create MDF/Petrel Authorizer (" + e.message + ").")
             clients["petrel"] = None
         # Remove processed service
         servs.remove("petrel")
@@ -353,19 +351,19 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             clients["groups"] = NexusClient(authorizer=groups_authorizer)
         # Token not present
         except KeyError:
-            print_("Error: Unable to retrieve Groups tokens.\n"
-                   "You may need to delete your old tokens and retry.")
+            print("Error: Unable to retrieve Groups tokens.\n"
+                  "You may need to delete your old tokens and retry.")
             clients["groups"] = None
         # Other issue
         except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Groups client (" + e.message + ").")
+            print("Error: Unable to create Groups client (" + e.message + ").")
             clients["groups"] = None
         # Remove processed service
         servs.remove("groups")
 
     # Warn of invalid services
     if servs:
-        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
+        print("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
 
     return clients
 
@@ -495,7 +493,7 @@ def confidential_login(credentials=None):
 
     # Warn of invalid services
     if servs:
-        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
+        print("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
 
     return clients
 
@@ -535,28 +533,28 @@ def anonymous_login(services):
 
     # Notify user of auth-only services
     if "search_ingest" in services:
-        print_("Error: Service 'search_ingest' requires authentication.")
+        print("Error: Service 'search_ingest' requires authentication.")
         services.remove("search_ingest")
 
     if "data_mdf" in services:
-        print_("Error: Service 'data_mdf' requires authentication.")
+        print("Error: Service 'data_mdf' requires authentication.")
         services.remove("data_mdf")
 
     if "connect" in services:
-        print_("Error: Service 'connect' requires authentication.")
+        print("Error: Service 'connect' requires authentication.")
         services.remove("connect")
 
     if "petrel" in services:
-        print_("Error: Service 'petrel' requires authentication.")
+        print("Error: Service 'petrel' requires authentication.")
         services.remove("petrel")
 
     if "mdf_connect" in services:
-        print_("Error: Service 'mdf_connect' requires authentication.")
+        print("Error: Service 'mdf_connect' requires authentication.")
         services.remove("mdf_connect")
 
     # Warn of invalid services
     if services:
-        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in services]))
+        print("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in services]))
 
     return clients
 
@@ -955,12 +953,12 @@ def get_local_ep(transfer_client):
         else:
             # Still >1 found
             # Prompt user
-            print_("Multiple endpoints found:")
+            print("Multiple endpoints found:")
             count = 0
             for ep in ep_connections:
                 count += 1
-                print_(count, ": ", ep["display_name"], "\t", ep["id"])
-            print_("\nPlease choose the endpoint on this machine")
+                print(count, ": ", ep["display_name"], "\t", ep["id"])
+            print("\nPlease choose the endpoint on this machine")
             ep_num = 0
             while ep_num == 0:
                 usr_choice = input("Enter the number of the correct endpoint (-1 to cancel): ")
@@ -974,12 +972,12 @@ def get_local_ep(transfer_client):
                         ep_num = ep_choice
                     else:
                         # Invalid number
-                        print_("Invalid selection")
+                        print("Invalid selection")
                 except Exception:
-                    print_("Invalid input")
+                    print("Invalid input")
 
             if ep_num == -1:
-                print_("Cancelling")
+                print("Cancelling")
                 raise SystemExit
             return ep_connections[ep_num-1]["id"]
 
@@ -1455,10 +1453,10 @@ class MDFConnectClient:
         """
         # Ensure resubmit matches reality
         if not resubmit and self.source_id:
-            print_("You have already submitted this dataset.")
+            print("You have already submitted this dataset.")
             return None
         elif resubmit and not self.source_id:
-            print_("You have not already submitted this dataset.")
+            print("You have not already submitted this dataset.")
             return None
 
         if not submission:
@@ -1466,7 +1464,7 @@ class MDFConnectClient:
 
         # Check for required data
         if not submission["dc"] or not submission["data"]:
-            print_("You must populate the dc and data blocks before submission.")
+            print("You must populate the dc and data blocks before submission.")
             return None
 
         headers = {}
@@ -1478,12 +1476,12 @@ class MDFConnectClient:
         try:
             json_res = res.json()
         except json.JSONDecodeError:
-            print_("Error decoding {} response: {}".format(res.status_code, res.content))
+            print("Error decoding {} response: {}".format(res.status_code, res.content))
         else:
             if res.status_code < 300:
                 self.source_id = json_res["source_id"]
             else:
-                print_("Error {} submitting dataset: {}".format(res.status_code, json_res))
+                print("Error {} submitting dataset: {}".format(res.status_code, json_res))
 
         if not reset:
             return self.source_id
@@ -1507,7 +1505,7 @@ class MDFConnectClient:
         If raw is True, dict: The full status.
         """
         if not source_id and not self.source_id:
-            print_("Error: No dataset submitted")
+            print("Error: No dataset submitted")
             return None
         headers = {}
         self.__authorizer.set_authorization_header(headers)
@@ -1518,14 +1516,14 @@ class MDFConnectClient:
         try:
             json_res = res.json()
         except json.JSONDecodeError:
-            print_("Error decoding {} response: {}".format(res.status_code, res.content))
+            print("Error decoding {} response: {}".format(res.status_code, res.content))
         else:
             if res.status_code >= 300:
-                print_("Error {} fetching status: {}".format(res.status_code, json_res))
+                print("Error {} fetching status: {}".format(res.status_code, json_res))
             elif raw:
                 return json_res
             else:
-                print_("\n", json_res["status_message"], sep="")
+                print("\n", json_res["status_message"], sep="")
 
 
 class DataPublicationClient(BaseClient):
@@ -1547,7 +1545,7 @@ class DataPublicationClient(BaseClient):
         try:
             return self.get('collections', params=params)
         except Exception as e:
-            print_('FAIL: {}'.format(e))
+            print('FAIL: {}'.format(e))
 
     def list_datasets(self, collection_id, **params):
         return self.get('collections/{}/datasets'.format(collection_id),
