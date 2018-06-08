@@ -176,6 +176,8 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
         app_name = "UNKNOWN"
     if not services:
         services = []
+    elif not isinstance(services, list):
+        services = [services]
     if not client_id:
         client_id = NATIVE_CLIENT_ID
 
