@@ -18,6 +18,7 @@ before_install:
 - mkdir -p ~/.mdf/credentials/
 - mv MDF_Forge_tokens.json ~/.mdf/credentials/MDF_Forge_tokens.json
 - mv MDF_Connect_Client_tokens.json ~/.mdf/credentials/MDF_Connect_Client_tokens.json
+- mv client_credentials.json ~/.mdf/credentials/client_credentials.json
 after_success:
 - coveralls
 notifications:
