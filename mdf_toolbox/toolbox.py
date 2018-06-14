@@ -1,12 +1,11 @@
 from datetime import datetime
-import gzip
 import json
 import os
 import re
 import requests
-import tarfile
+import shutil
+import sys
 import time
-import zipfile
 
 from globus_nexus_client import NexusClient
 import globus_sdk
@@ -14,10 +13,8 @@ from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
 from tqdm import tqdm
 
-from six import print_
-from six.moves import input
 
-AUTH_SCOPES = {
+KNOWN_SCOPES = {
     "transfer": "urn:globus:auth:scope:transfer.api.globus.org:all",
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
@@ -25,12 +22,28 @@ AUTH_SCOPES = {
     "publish": ("https://auth.globus.org/scopes/"
                 "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"),
     "connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
-    "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
+    "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
     "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups"
 }
-LOGIN_CLIENTS = {
-    "transfer": globus_sdk.TransferClient
+KNOWN_TOKEN_KEYS = {
+    "transfer": "transfer.api.globus.org",
+    "search": "search.api.globus.org",
+    "search_ingest": "search.api.globus.org",
+    "data_mdf": "data.materialsdatafacility.org",
+    "publish": "publish.api.globus.org",
+    "connect": "mdf_dataset_submission",
+    "mdf_connect": "mdf_dataset_submission",
+    "petrel": "petrel_https_server",
+    "groups": "nexus.api.globus.org"
+}
+KNOWN_CLIENTS = {
+    "transfer": globus_sdk.TransferClient,
+    "search": globus_sdk.SearchClient,
+    "search_ingest": globus_sdk.SearchClient,
+    #  "publish": DataPublicationClient,  # Defined in this module, added to dict later
+    #  "mdf_connect": MDFConnectClient,   # Defined in this module, added to dict later
+    "groups": NexusClient
 }
 SEARCH_INDEX_UUIDS = {
     "mdf": "1a57bbe5-5272-477f-9d31-343b8258b7a5",
@@ -50,7 +63,7 @@ DEFAULT_INACTIVITY_TIME = 1 * 24 * 60 * 60  # 1 day, in seconds
 # * Authentication utilities
 # *************************************************
 
-def login(credentials=None, app_name=None, services=None, client_id=None,
+def login(credentials=None, app_name=None, services=None, client_id=None, make_clients=True,
           clear_old_tokens=False, **kwargs):
     """Login to Globus services
 
@@ -66,6 +79,9 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
                             Default [].
     client_id (str): The ID of the client, given when registered with Globus.
                      Default is the MDF Native Clients ID.
+    make_clients (bool): If True, will make and return appropriate clients with generated tokens.
+                         If False, will only return authorizers.
+                         Default True.
     clear_old_tokens (bool): If True, delete old token file if it exists, forcing user to re-login.
                              If False, use existing token file if there is one.
                              Default False.
@@ -74,6 +90,8 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
     dict: The clients and authorizers requested, indexed by service name.
           For example, if login() is told to auth with 'search'
             then the search client will be in the 'search' field.
+          Note: Previously requested tokens (which are cached) will be returned alongside
+            explicitly requested ones.
     """
     NATIVE_CLIENT_ID = "98bfc684-977f-4670-8669-71f8337688e4"
     DEFAULT_CRED_FILENAME = "globus_login.json"
@@ -121,8 +139,8 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             client.oauth2_start_flow(requested_scopes=scopes, refresh_tokens=True)
             authorize_url = client.oauth2_get_authorize_url()
 
-            print_("It looks like this is the first time you're accessing this service.",
-                   "\nPlease log in to Globus at this link:\n", authorize_url)
+            print("It looks like this is the first time you're accessing this service.",
+                  "\nPlease log in to Globus at this link:\n", authorize_url)
             auth_code = input("Copy and paste the authorization code here: ").strip()
 
             # Handle 401s
@@ -139,7 +157,7 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             os.umask(0o077)
             with open(token_path, "w") as tf:
                 json.dump(tokens, tf)
-            print_("Thanks! You're now logged in.")
+            print("Thanks! You're now logged in.")
 
         return tokens
 
@@ -173,12 +191,14 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
                                      + DEFAULT_CRED_PATH
                                      + "'.")
         app_name = creds.get("app_name")
-        services = creds.get("services")
+        services = creds.get("services", services)
         client_id = creds.get("client_id")
     if not app_name:
         app_name = "UNKNOWN"
     if not services:
         services = []
+    elif isinstance(services, str):
+        services = [services]
     if not client_id:
         client_id = NATIVE_CLIENT_ID
 
@@ -191,198 +211,63 @@ def login(credentials=None, app_name=None, services=None, client_id=None,
             servs += serv.split(" ")
         else:
             servs += list(serv)
-    # Translate services into scopes, pass bad/unknown services
-    scopes = " ".join([AUTH_SCOPES.get(sc, "") for sc in servs])
+    # Translate services into scopes as possible
+    scopes = " ".join([KNOWN_SCOPES.get(sc, sc) for sc in servs])
 
     all_tokens = _get_tokens(native_client, scopes, app_name, force_refresh=clear_old_tokens)
 
-    clients = {}
-    if "transfer" in servs:
+    # Make authorizers with every returned token
+    all_authorizers = {}
+    for key, tokens in all_tokens.items():
+        # TODO: Allow non-Refresh authorizers
         try:
-            transfer_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                        all_tokens["transfer.api.globus.org"]["refresh_token"],
-                                        native_client)
-            clients["transfer"] = globus_sdk.TransferClient(authorizer=transfer_authorizer)
-        # Token not present
+            all_authorizers[key] = globus_sdk.RefreshTokenAuthorizer(tokens["refresh_token"],
+                                                                     native_client)
         except KeyError:
-            print_("Error: Unable to retrieve Transfer tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["transfer"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Transfer client (" + e.message + ").")
-            clients["transfer"] = None
-        # Remove processed service
-        servs.remove("transfer")
+            print("Error: Unable to retrieve tokens for '{}'.\n"
+                  "You may need to delete your old tokens and retry.".format(key))
+    returnables = {}
+    # Populate clients and named services
+    # Only translate back services - if user provides scope directly, don't translate back
+    # ex. transfer => urn:transfer.globus.org:all => transfer,
+    #     but urn:transfer.globus.org:all !=> transfer
+    for service in servs:
+        token_key = KNOWN_TOKEN_KEYS.get(service)
+        # If the .by_resource_server key (token key) for the service was returned
+        if token_key in all_authorizers.keys():
+            # If there is an applicable client (all clients have known token key)
+            # Pop from all_authorizers to remove from final return value
+            if make_clients and KNOWN_CLIENTS.get(service):
+                try:
+                    returnables[service] = KNOWN_CLIENTS[service](
+                                                authorizer=all_authorizers.pop(token_key))
+                except globus_sdk.GlobusAPIError as e:
+                    print("Error: Unable to create {} client: {}".format(service, e.message))
+            # If no applicable client, just translate the key
+            else:
+                returnables[service] = all_authorizers.pop(token_key)
+    # Add authorizers not associated with service to returnables
+    returnables.update(all_authorizers)
 
-    if "search_ingest" in servs:
-        try:
-            ingest_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                        all_tokens["search.api.globus.org"]["refresh_token"],
-                                        native_client)
-            clients["search_ingest"] = globus_sdk.SearchClient(authorizer=ingest_authorizer)
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve Search (ingest) tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["search_ingest"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Search (ingest) client (" + e.message + ").")
-            clients["search_ingest"] = None
-        # Remove processed service
-        servs.remove("search_ingest")
-        # And redundant service
-        try:
-            servs.remove("search")
-        # No issue if it isn't there
-        except Exception:
-            pass
-    elif "search" in servs:
-        try:
-            search_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                        all_tokens["search.api.globus.org"]["refresh_token"],
-                                        native_client)
-            clients["search"] = globus_sdk.SearchClient(authorizer=search_authorizer)
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve Search tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["search"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Search client (" + e.message + ").")
-            clients["search"] = None
-        # Remove processed service
-        servs.remove("search")
-
-    if "data_mdf" in servs:
-        try:
-            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["data.materialsdatafacility.org"]["refresh_token"],
-                                    native_client)
-            clients["data_mdf"] = mdf_authorizer
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve MDF/NCSA tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["data_mdf"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF/NCSA Authorizer (" + e.message + ").")
-            clients["data_mdf"] = None
-        # Remove processed service
-        servs.remove("data_mdf")
-
-    if "publish" in servs:
-        try:
-            publish_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                        all_tokens["publish.api.globus.org"]["refresh_token"],
-                                        native_client)
-            clients["publish"] = DataPublicationClient(authorizer=publish_authorizer)
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve Publish tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["publish"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Publish client (" + e.message + ").")
-            clients["publish"] = None
-        # Remove processed service
-        servs.remove("publish")
-
-    if "connect" in servs:
-        try:
-            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["mdf_dataset_submission"]["refresh_token"],
-                                    native_client)
-            clients["connect"] = mdf_authorizer
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve MDF Connect tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["connect"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF Connect Authorizer (" + e.message + ").")
-            clients["connect"] = None
-        # Remove processed service
-        servs.remove("connect")
-
-    if "mdf_connect" in servs:
-        try:
-            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["mdf_dataset_submission"]["refresh_token"],
-                                    native_client)
-            clients["mdf_connect"] = MDFConnectClient(authorizer=mdf_authorizer)
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve MDF Connect tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["mdf_connect"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF Connect Client (" + e.message + ").")
-            clients["mdf_connect"] = None
-        # Remove processed service
-        servs.remove("mdf_connect")
-
-    if "petrel" in servs:
-        try:
-            mdf_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                    all_tokens["petrel_https_server"]["refresh_token"],
-                                    native_client)
-            clients["petrel"] = mdf_authorizer
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve MDF/Petrel tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["petrel"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create MDF/Petrel Authorizer (" + e.message + ").")
-            clients["petrel"] = None
-        # Remove processed service
-        servs.remove("petrel")
-
-    if "groups" in servs:
-        try:
-            groups_authorizer = globus_sdk.RefreshTokenAuthorizer(
-                                        all_tokens["nexus.api.globus.org"]["refresh_token"],
-                                        native_client)
-            clients["groups"] = NexusClient(authorizer=groups_authorizer)
-        # Token not present
-        except KeyError:
-            print_("Error: Unable to retrieve Groups tokens.\n"
-                   "You may need to delete your old tokens and retry.")
-            clients["groups"] = None
-        # Other issue
-        except globus_sdk.GlobusAPIError as e:
-            print_("Error: Unable to create Groups client (" + e.message + ").")
-            clients["groups"] = None
-        # Remove processed service
-        servs.remove("groups")
-
-    # Warn of invalid services
-    if servs:
-        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
-
-    return clients
+    return returnables
 
 
-def confidential_login(credentials=None):
+def confidential_login(credentials=None, client_id=None, client_secret=None, services=None,
+                       make_clients=True):
     """Login to Globus services as a confidential client (a client with its own login information).
 
     Arguments:
     credentials (str or dict): A string filename, string JSON, or dictionary
                                    with credential and config information.
                                By default, uses the DEFAULT_CRED_FILENAME and DEFAULT_CRED_PATH.
-        Contains:
-        client_id (str): The ID of the client.
-        client_secret (str): The client's secret for authentication.
-        services (list of str): Services to authenticate with.
-                                Services are listed in AUTH_SCOPES.
+        Contains client_id, client_secret, and services as defined below.
+    client_id (str): The ID of the client.
+    client_secret (str): The client's secret for authentication.
+    services (list of str): Services to authenticate with.
+                            Services are listed in AUTH_SCOPES.
+    make_clients (bool): If True, will make and return appropriate clients with generated tokens.
+                         If False, will only return authorizers.
+                         Default True.
 
     Returns:
     dict: The clients and authorizers requested, indexed by service name.
@@ -391,114 +276,85 @@ def confidential_login(credentials=None):
     """
     DEFAULT_CRED_FILENAME = "confidential_globus_login.json"
     DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
-    # Read credentials
-    if type(credentials) is str:
-        try:
-            with open(credentials) as cred_file:
-                creds = json.load(cred_file)
-        except IOError:
+    # Read credentials if supplied
+    if credentials:
+        if type(credentials) is str:
             try:
-                creds = json.loads(credentials)
-            except ValueError:
-                raise ValueError("Credentials unreadable or missing")
-    elif type(credentials) is dict:
-        creds = credentials
-    else:
-        try:
-            with open(os.path.join(os.getcwd(), DEFAULT_CRED_FILENAME)) as cred_file:
-                creds = json.load(cred_file)
-        except IOError:
-            try:
-                with open(os.path.join(DEFAULT_CRED_PATH, DEFAULT_CRED_FILENAME)) as cred_file:
+                with open(credentials) as cred_file:
                     creds = json.load(cred_file)
             except IOError:
-                raise ValueError("Credentials/configuration must be passed as a "
-                                 + "filename string, JSON string, or dictionary, or provided in '"
-                                 + DEFAULT_CRED_FILENAME
-                                 + "' or '"
-                                 + DEFAULT_CRED_PATH
-                                 + "'.")
+                try:
+                    creds = json.loads(credentials)
+                except ValueError:
+                    raise ValueError("Credentials unreadable or missing")
+        elif type(credentials) is dict:
+            creds = credentials
+        else:
+            try:
+                with open(os.path.join(os.getcwd(), DEFAULT_CRED_FILENAME)) as cred_file:
+                    creds = json.load(cred_file)
+            except IOError:
+                try:
+                    with open(os.path.join(DEFAULT_CRED_PATH, DEFAULT_CRED_FILENAME)) as cred_file:
+                        creds = json.load(cred_file)
+                except IOError:
+                    raise ValueError("Credentials/configuration must be passed as a "
+                                     "filename string, JSON string, or dictionary, or provided "
+                                     "in '{}' or '{}'.".format(DEFAULT_CRED_FILENAME,
+                                                               DEFAULT_CRED_PATH))
+        client_id = creds.get("client_id")
+        client_secret = creds.get("client_secret")
+        services = creds.get("services", services)
+    if not client_id or not client_secret:
+        raise ValueError("A client_id and client_secret are required.")
+    if not services:
+        services = []
+    elif isinstance(services, str):
+        services = [services]
 
-    conf_client = globus_sdk.ConfidentialAppAuthClient(creds["client_id"], creds["client_secret"])
+    conf_client = globus_sdk.ConfidentialAppAuthClient(client_id, client_secret)
     servs = []
-    for serv in creds["services"]:
+    for serv in services:
         serv = serv.lower().strip()
         if type(serv) is str:
             servs += serv.split(" ")
         else:
             servs += list(serv)
+    # Translate services into scopes as possible
+    scopes = [KNOWN_SCOPES.get(sc, sc) for sc in servs]
 
-    clients = {}
-    if "transfer" in servs:
-        clients["transfer"] = globus_sdk.TransferClient(
-                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                                conf_client, scopes=AUTH_SCOPES["transfer"]))
-        # Remove processed service
-        servs.remove("transfer")
-
-    if "search_ingest" in servs:
-        clients["search_ingest"] = globus_sdk.SearchClient(
-                                        authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                            conf_client, scopes=AUTH_SCOPES["search_ingest"]))
-        # Remove processed service
-        servs.remove("search_ingest")
-        # And redundant service
+    # Make authorizers with every returned token
+    all_authorizers = {}
+    for scope in scopes:
+        # TODO: Allow non-CC authorizers?
         try:
-            servs.remove("search")
-        # No issue if it isn't there
-        except Exception:
-            pass
-    elif "search" in servs:
-        clients["search"] = globus_sdk.SearchClient(
-                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                    conf_client, scopes=AUTH_SCOPES["search"]))
-        # Remove processed service
-        servs.remove("search")
+            all_authorizers[scope] = globus_sdk.ClientCredentialsAuthorizer(conf_client, scope)
+        except Exception as e:
+            print("Error: Cannot create authorizer for scope '{}' ({})".format(scope, str(e)))
+    returnables = {}
+    # Populate clients and named services
+    # Only translate back services - if user provides scope directly, don't translate back
+    # ex. transfer => urn:transfer.globus.org:all => transfer,
+    #     but urn:transfer.globus.org:all !=> transfer
+    for service in servs:
+        token_key = KNOWN_SCOPES.get(service)
+        # If the .by_resource_server key (token key) for the service was returned
+        if token_key in all_authorizers.keys():
+            # If there is an applicable client (all clients have known token key)
+            # Pop from all_authorizers to remove from final return value
+            if make_clients and KNOWN_CLIENTS.get(service):
+                try:
+                    returnables[service] = KNOWN_CLIENTS[service](
+                                                authorizer=all_authorizers.pop(token_key))
+                except globus_sdk.GlobusAPIError as e:
+                    print("Error: Unable to create {} client: {}".format(service, e.message))
+            # If no applicable client, just translate the key
+            else:
+                returnables[service] = all_authorizers.pop(token_key)
+    # Add authorizers not associated with service to returnables
+    returnables.update(all_authorizers)
 
-    if "data_mdf" in servs:
-        clients["data_mdf"] = globus_sdk.ClientCredentialsAuthorizer(
-                                conf_client, scopes=AUTH_SCOPES["data_mdf"])
-        # Remove processed service
-        servs.remove("data_mdf")
-
-    if "publish" in servs:
-        clients["publish"] = DataPublicationClient(
-                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                                conf_client, scopes=AUTH_SCOPES["publish"]))
-        # Remove processed service
-        servs.remove("publish")
-
-    if "connect" in servs:
-        clients["connect"] = globus_sdk.ClientCredentialsAuthorizer(
-                                conf_client, scopes=AUTH_SCOPES["connect"])
-        # Remove processed service
-        servs.remove("connect")
-
-    if "mdf_connect" in servs:
-        clients["mdf_connect"] = MDFConnectClient(
-                                    authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                                conf_client, scopes=AUTH_SCOPES["mdf_connect"]))
-        # Remove processed service
-        servs.remove("mdf_connect")
-
-    if "petrel" in servs:
-        clients["petrel"] = globus_sdk.ClientCredentialsAuthorizer(
-                                conf_client, scopes=AUTH_SCOPES["petrel"])
-        # Remove processed service
-        servs.remove("petrel")
-
-    if "groups" in servs:
-        clients["groups"] = NexusClient(
-                                authorizer=globus_sdk.ClientCredentialsAuthorizer(
-                                             conf_client, scopes=AUTH_SCOPES["groups"]))
-        # Remove processed service
-        servs.remove("groups")
-
-    # Warn of invalid services
-    if servs:
-        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in servs]))
-
-    return clients
+    return returnables
 
 
 def anonymous_login(services):
@@ -506,7 +362,8 @@ def anonymous_login(services):
 
     Arguments:
     services (str or list of str): The services to initialize clients for.
-                                   Note that not all services support unauthenticated clients.
+                                   Note that clients may have reduced functionality
+                                   without authentication.
 
     Returns:
     dict: The clients requested, indexed by service name.
@@ -518,46 +375,14 @@ def anonymous_login(services):
 
     clients = {}
     # Initialize valid services
-    if "transfer" in services:
-        clients["transfer"] = globus_sdk.TransferClient()
-        services.remove("transfer")
-
-    if "search" in services:
-        clients["search"] = globus_sdk.SearchClient()
-        services.remove("search")
-
-    if "publish" in services:
-        clients["publish"] = DataPublicationClient()
-        services.remove("publish")
-
-    if "groups" in services:
-        clients["groups"] = NexusClient()
-        services.remove("groups")
-
-    # Notify user of auth-only services
-    if "search_ingest" in services:
-        print_("Error: Service 'search_ingest' requires authentication.")
-        services.remove("search_ingest")
-
-    if "data_mdf" in services:
-        print_("Error: Service 'data_mdf' requires authentication.")
-        services.remove("data_mdf")
-
-    if "connect" in services:
-        print_("Error: Service 'connect' requires authentication.")
-        services.remove("connect")
-
-    if "petrel" in services:
-        print_("Error: Service 'petrel' requires authentication.")
-        services.remove("petrel")
-
-    if "mdf_connect" in services:
-        print_("Error: Service 'mdf_connect' requires authentication.")
-        services.remove("mdf_connect")
-
-    # Warn of invalid services
-    if services:
-        print_("\n".join(["Unknown or invalid service: '" + sv + "'." for sv in services]))
+    for serv in services:
+        try:
+            clients[serv] = KNOWN_CLIENTS[serv]()
+        except KeyError:  # No known client
+            print("Error: No known client for '{}' service.".format(serv))
+        except Exception:  # Other issue, probably auth
+            print("Error: Unable to create client for '{}' service.\n"
+                  "Anonymous access may not be allowed.".format(serv))
 
     return clients
 
@@ -599,38 +424,50 @@ def find_files(root, file_pattern=None, verbose=False):
                     }
 
 
-def uncompress_tree(root, verbose=False):
-    """Uncompress all tar, zip, and gzip archives under a given directory.
-    Note that this process tends to be very slow.
+def uncompress_tree(root, delete_archives=False):
+    """IMPORTANT: Only compatible with Python 3.
+    Uncompress all tar, zip, and gzip archives under a given directory.
+    Archives will be extracted to a sibling directory named after the archive (minus extension).
+    This process can be slow, depending on the number and size of archives.
 
     Arguments:
     root (str): The path to the starting (root) directory.
-    verbose: If True, will print_ status messages.
-             If False, will remain silent unless there is an error.
-             Default False.
+    delete_archives (bool): If True, will delete extracted archive files.
+                            If False, will preserve archive files.
+                            Default False.
+    Returns:
+    dict: Results.
+        success (bool): If the extraction succeeded.
+        num_extracted (int): Number of archives extracted.
     """
-    for file_info in tqdm(find_files(root), desc="Uncompressing files", disable=(not verbose)):
-        dir_path = os.path.abspath(file_info["path"])
-        abs_path = os.path.join(dir_path, file_info["filename"])
-        if tarfile.is_tarfile(abs_path):
-            tar = tarfile.open(abs_path)
-            tar.extractall(dir_path)
-            tar.close()
-        elif zipfile.is_zipfile(abs_path):
-            z = zipfile.ZipFile(abs_path)
-            z.extractall(dir_path)
-            z.close()
-        else:
-            try:
-                with gzip.open(abs_path) as gz:
-                    file_data = gz.read()
-                    # Opens the absolute path, including filename, for writing
-                    # Does not include the extension (should be .gz or similar)
-                    with open(abs_path.rsplit('.', 1)[0], 'w') as newfile:
-                        newfile.write(str(file_data))
-            # An IOErrorwill occur at gz.read() if the file is not a gzip
-            except IOError:
-                pass
+    if sys.version_info.major < 3:
+        raise NotImplementedError("uncompress_tree is only available in Python 3.\n"
+                                  "Please consider upgrading.")
+    num_extracted = 0
+    # Start list of dirs to extract with root
+    # Later, add newly-created dirs with extracted files, because os.walk will miss them
+    extract_dirs = [os.path.abspath(root)]
+    while len(extract_dirs) > 0:
+        for path, dirs, files in os.walk(extract_dirs.pop()):
+            for filename in files:
+                try:
+                    # Extract my_archive.tar to sibling dir my_archive
+                    archive_path = os.path.join(path, filename)
+                    extracted_files_dir = os.path.join(path, os.path.splitext(filename)[0])
+                    shutil.unpack_archive(archive_path, extracted_files_dir)
+                except shutil.ReadError:
+                    # ReadError means is not an (extractable) archive
+                    pass
+                else:
+                    num_extracted += 1
+                    # Add new dir to list of dirs to process
+                    extract_dirs.append(extracted_files_dir)
+                    if delete_archives:
+                        os.remove(archive_path)
+    return {
+        "success": True,
+        "num_extracted": num_extracted
+    }
 
 
 # *************************************************
@@ -944,12 +781,12 @@ def get_local_ep(transfer_client):
         else:
             # Still >1 found
             # Prompt user
-            print_("Multiple endpoints found:")
+            print("Multiple endpoints found:")
             count = 0
             for ep in ep_connections:
                 count += 1
-                print_(count, ": ", ep["display_name"], "\t", ep["id"])
-            print_("\nPlease choose the endpoint on this machine")
+                print(count, ": ", ep["display_name"], "\t", ep["id"])
+            print("\nPlease choose the endpoint on this machine")
             ep_num = 0
             while ep_num == 0:
                 usr_choice = input("Enter the number of the correct endpoint (-1 to cancel): ")
@@ -963,12 +800,12 @@ def get_local_ep(transfer_client):
                         ep_num = ep_choice
                     else:
                         # Invalid number
-                        print_("Invalid selection")
+                        print("Invalid selection")
                 except Exception:
-                    print_("Invalid input")
+                    print("Invalid input")
 
             if ep_num == -1:
-                print_("Cancelling")
+                print("Cancelling")
                 raise SystemExit
             return ep_connections[ep_num-1]["id"]
 
@@ -1208,6 +1045,10 @@ class MDFConnectClient:
             acl = [acl]
         self.mdf["acl"] = acl
 
+    def clear_acl(self):
+        """Reset the ACL of your dataset to the default value ["public"]."""
+        self.mdf.pop("acl", None)
+
     def set_source_name(self, source_name):
         """Set the source name for your dataset.
 
@@ -1221,6 +1062,30 @@ class MDFConnectClient:
                            .check_status() can handle this for you.
         """
         self.mdf["source_name"] = source_name
+
+    def clear_source_name(self):
+        """Remove a previously set source_name."""
+        self.mdf.pop("source_name", None)
+
+    def add_repositories(self, repositories):
+        """Add repositories to your dataset.
+
+        Arguments:
+        repositories (str or list of str): The repository or repositories to add.
+                                           If the repository is not known to MDF, it will
+                                           be discarded.
+                                           Additional repositories may be added automatically.
+        """
+        if not isinstance(repositories, list):
+            repositories = [repositories]
+        if not self.mdf.get("repositories"):
+            self.mdf["repositories"] = repositories
+        else:
+            self.mdf["repositories"].extend(repositories)
+
+    def clear_repositories(self):
+        """Clear all added repositories from the submission."""
+        self.mdf.pop("repositories", None)
 
     def create_mrr_block(self, mrr_data):
         """Create the mrr block for your dataset.
@@ -1340,7 +1205,55 @@ class MDFConnectClient:
         """
         self.test = test
 
-    def submit_dataset(self, test=False, resubmit=False, submission=None):
+    def get_submission(self):
+        """Fetch the current state of your submission.
+
+        Returns:
+        dict: Your submission.
+        """
+        submission = {
+            "dc": self.dc,
+            "data": self.data,
+            "test": self.test
+        }
+        if self.mdf:
+            submission["mdf"] = self.mdf
+        if self.mrr:
+            submission["mrr"] = self.mrr
+        if self.custom:
+            submission["__custom"] - self.custom
+        if self.index:
+            submission["index"] = self.index
+        if self.services:
+            submission["services"] = self.services
+        return submission
+
+    def reset_submission(self):
+        """Completely clear all metadata from your submission.
+        This action cannot be undone.
+        The last submission's source_id will also be cleared. If you want to use check_status,
+        you will be required to input the source_id manually.
+
+        Returns:
+        dict: The variables that are NOT cleared, including:
+            test
+            service_location
+        """
+        self.dc = {}
+        self.mdf = {}
+        self.mrr = {}
+        self.custom = {}
+        self.clear_data()
+        self.clear_index()
+        self.clear_services()
+        self.source_id = None
+
+        return {
+            "test": self.test,
+            "service_location": self.service_loc
+        }
+
+    def submit_dataset(self, test=False, resubmit=False, submission=None, reset=False):
         """Submit your dataset to MDF Connect for processing.
 
         Arguments:
@@ -1353,41 +1266,34 @@ class MDFConnectClient:
                            you can submit it here. This argument supersedes any data
                            set through other methods.
                            Default None, to use method-assembled data.
+        reset (bool): If True, will clear the old submission. The test flag will be preserved.
+                      IMPORTANT: The source_id of the submission will not be saved if
+                                 this argument is True. check_status will require you to
+                                 pass the source_id as an argument.
+                      If False, the submission will be preserved.
+                      Default False.
 
         Returns:
         str: The source_id of your dataset. This is also saved in self.source_id.
              The source_id is the source_name plus the version.
              In other words, source_name is unique to your dataset,
-             and sourc_id is unique to your submission of the dataset.
+             and source_id is unique to your submission of the dataset.
         """
         # Ensure resubmit matches reality
         if not resubmit and self.source_id:
-            print_("You have already submitted this dataset.")
+            print("You have already submitted this dataset.")
             return None
         elif resubmit and not self.source_id:
-            print_("You have not already submitted this dataset.")
+            print("You have not already submitted this dataset.")
             return None
 
         if not submission:
-            # Check for required data
-            if not self.dc or not self.data:
-                print_("You must populate the dc and data blocks before submission.")
-                return None
-            submission = {
-                "dc": self.dc,
-                "data": self.data,
-                "test": self.test or test
-            }
-            if self.mdf:
-                submission["mdf"] = self.mdf
-            if self.mrr:
-                submission["mrr"] = self.mrr
-            if self.custom:
-                submission["__custom"] - self.custom
-            if self.index:
-                submission["index"] = self.index
-            if self.services:
-                submission["services"] = self.services
+            submission = self.get_submission()
+
+        # Check for required data
+        if not submission["dc"] or not submission["data"]:
+            print("You must populate the dc and data blocks before submission.")
+            return None
 
         headers = {}
         self.__authorizer.set_authorization_header(headers)
@@ -1398,14 +1304,19 @@ class MDFConnectClient:
         try:
             json_res = res.json()
         except json.JSONDecodeError:
-            print_("Error decoding {} response: {}".format(res.status_code, res.content))
+            print("Error decoding {} response: {}".format(res.status_code, res.content))
         else:
             if res.status_code < 300:
                 self.source_id = json_res["source_id"]
             else:
-                print_("Error {} submitting dataset: {}".format(res.status_code, json_res))
+                print("Error {} submitting dataset: {}".format(res.status_code, json_res))
 
-        return self.source_id
+        if not reset:
+            return self.source_id
+        else:
+            source_id = self.source_id
+            self.reset_submission()
+            return source_id
 
     def check_status(self, source_id=None, raw=False):
         """Check the status of your submission.
@@ -1422,7 +1333,7 @@ class MDFConnectClient:
         If raw is True, dict: The full status.
         """
         if not source_id and not self.source_id:
-            print_("Error: No dataset submitted")
+            print("Error: No dataset submitted")
             return None
         headers = {}
         self.__authorizer.set_authorization_header(headers)
@@ -1433,14 +1344,14 @@ class MDFConnectClient:
         try:
             json_res = res.json()
         except json.JSONDecodeError:
-            print_("Error decoding {} response: {}".format(res.status_code, res.content))
+            print("Error decoding {} response: {}".format(res.status_code, res.content))
         else:
             if res.status_code >= 300:
-                print_("Error {} fetching status: {}".format(res.status_code, json_res))
+                print("Error {} fetching status: {}".format(res.status_code, json_res))
             elif raw:
                 return json_res
             else:
-                print_("\n", json_res["status_message"], sep="")
+                print("\n", json_res["status_message"], sep="")
 
 
 class DataPublicationClient(BaseClient):
@@ -1462,7 +1373,7 @@ class DataPublicationClient(BaseClient):
         try:
             return self.get('collections', params=params)
         except Exception as e:
-            print_('FAIL: {}'.format(e))
+            print('FAIL: {}'.format(e))
 
     def list_datasets(self, collection_id, **params):
         return self.get('collections/{}/datasets'.format(collection_id),
@@ -1490,3 +1401,8 @@ class DataPublicationClient(BaseClient):
 
     def list_submissions(self, **params):
         return self.get('submissions', params=params)
+
+
+# Add Toolbox clients to known clients
+KNOWN_CLIENTS["publish"] = DataPublicationClient
+KNOWN_CLIENTS["mdf_connect"] = MDFConnectClient

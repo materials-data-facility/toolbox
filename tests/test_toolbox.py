@@ -1,6 +1,7 @@
 from copy import deepcopy
 import json
 import os
+import shutil
 
 from globus_nexus_client import NexusClient
 import globus_sdk
@@ -24,32 +25,29 @@ def test_login(capsys, monkeypatch):
     # Test other services
     creds2 = deepcopy(credentials)
     creds2["services"] = ["search_ingest", "transfer", "data_mdf", "connect",
-                          "petrel", "publish", "mdf_connect", "groups"]
+                          "petrel", "publish", "groups"]
     res2 = mdf_toolbox.login(creds2)
+    print(res2)
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res2.get("data_mdf"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("connect"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("publish"), mdf_toolbox.DataPublicationClient)
-    assert isinstance(res2.get("mdf_connect"), mdf_toolbox.MDFConnectClient)
     assert isinstance(res2.get("groups"), NexusClient)
 
-    # Test nothing
     creds3 = deepcopy(credentials)
-    assert mdf_toolbox.login(creds3) == {}
+    creds3["services"] = "mdf_connect"
+    res3 = mdf_toolbox.login(creds3)
+    assert isinstance(res3.get("mdf_connect"), mdf_toolbox.MDFConnectClient)
+
+    # Test fetching previous tokens
+    creds = deepcopy(credentials)
+    assert mdf_toolbox.login(creds).get("petrel_https_server")
 
     # Error on bad creds
     with pytest.raises(ValueError):
         mdf_toolbox.login("nope")
-
-    # Error on bad services
-    creds4 = deepcopy(credentials)
-    creds4["services"] = ["garbage", "invalid"]
-    assert mdf_toolbox.login(creds4) == {}
-    out, err = capsys.readouterr()
-    assert "Unknown or invalid service: 'garbage'." in out
-    assert "Unknown or invalid service: 'invalid'." in out
 
     # TODO: Test user input prompt
     # monkeypatch.setattr(mdf_toolbox, "input", (lambda x=None: "invalid"))
@@ -57,9 +55,41 @@ def test_login(capsys, monkeypatch):
     #    mdf_toolbox.login()
 
 
-def test_confidential_login():
-    # TODO
-    pass
+def test_confidential_login(capsys):
+    # Load creds
+    with open(os.path.expanduser("~/.mdf/credentials/client_credentials.json")) as f:
+        creds = json.load(f)
+
+    # Single services, different cases
+    assert isinstance(mdf_toolbox.confidential_login(creds, services="transfer")["transfer"],
+                      globus_sdk.TransferClient)
+    assert isinstance(mdf_toolbox.confidential_login(creds, services=["search"])["search"],
+                      globus_sdk.SearchClient)
+    # Manual scope set
+    assert isinstance(mdf_toolbox.confidential_login(
+                                    creds,
+                                    services="urn:globus:auth:scope:transfer.api.globus.org:all"
+                                    )["urn:globus:auth:scope:transfer.api.globus.org:all"],
+                      globus_sdk.ClientCredentialsAuthorizer)
+    # make_clients=False
+    assert isinstance(mdf_toolbox.confidential_login(
+                                    creds, services="transfer", make_clients=False)["transfer"],
+                      globus_sdk.ClientCredentialsAuthorizer)
+    # Arg creds
+    assert isinstance(mdf_toolbox.confidential_login(client_id=creds["client_id"],
+                                                     client_secret=creds["client_secret"],
+                                                     services=["publish"])["publish"],
+                      mdf_toolbox.DataPublicationClient)
+    # No client available
+    assert isinstance(mdf_toolbox.confidential_login(creds, services="petrel")["petrel"],
+                      globus_sdk.ClientCredentialsAuthorizer)
+
+    # No scope
+    assert mdf_toolbox.confidential_login(creds) == {}
+    # Bad scope
+    assert mdf_toolbox.confidential_login(creds, services="invalid") == {}
+    out, err = capsys.readouterr()
+    assert "Error: Cannot create authorizer for scope 'invalid'" in out
 
 
 def test_anonymous_login(capsys):
@@ -74,21 +104,11 @@ def test_anonymous_login(capsys):
     res2 = mdf_toolbox.anonymous_login("search")
     assert isinstance(res2.get("search"), globus_sdk.SearchClient)
 
-    # Auth-only services don't work
-    assert mdf_toolbox.anonymous_login(["search_ingest", "data_mdf", "connect", "petrel",
-                                        "mdf_connect"]) == {}
-    out, err = capsys.readouterr()
-    assert "Error: Service 'search_ingest' requires authentication." in out
-    assert "Error: Service 'data_mdf' requires authentication." in out
-    assert "Error: Service 'connect' requires authentication." in out
-    assert "Error: Service 'petrel' requires authentication." in out
-    assert "Error: Service 'mdf_connect' requires authentication." in out
-
     # Bad services don't work
     assert mdf_toolbox.anonymous_login(["garbage", "invalid"]) == {}
     out, err = capsys.readouterr()
-    assert "Unknown or invalid service: 'garbage'." in out
-    assert "Unknown or invalid service: 'invalid'." in out
+    assert "Error: No known client for 'garbage' service." in out
+    assert "Error: No known client for 'invalid' service." in out
 
 
 def test_find_files():
@@ -147,10 +167,25 @@ def test_find_files():
 
 def test_uncompress_tree():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
+    # Basic test, should extract tar and nested tar, but not delete anything
     mdf_toolbox.uncompress_tree(root)
-    path = os.path.join(root, "toolbox_more", "tlbx_uncompressed.txt")
-    assert os.path.isfile(path)
-    os.remove(path)
+    lv1_txt = os.path.join(root, "toolbox_more", "toolbox_compressed", "tlbx_uncompressed.txt")
+    assert os.path.isfile(lv1_txt)
+    lv2_txt = os.path.join(root, "toolbox_more", "toolbox_compressed", "toolbox_nested",
+                           "tlbx_uncompressed2.txt")
+    assert os.path.isfile(lv2_txt)
+    nested_tar = os.path.join(root, "toolbox_more", "toolbox_compressed", "toolbox_nested.tar")
+    assert os.path.isfile(nested_tar)
+
+    # Test deleting extracted archive
+    shutil.rmtree(os.path.join(root, "toolbox_more", "toolbox_compressed", "toolbox_nested"))
+    mdf_toolbox.uncompress_tree(os.path.join(root, "toolbox_more", "toolbox_compressed"),
+                                delete_archives=True)
+    assert os.path.isfile(lv2_txt)
+    assert not os.path.isfile(nested_tar)
+
+    # Clean up
+    shutil.rmtree(os.path.join(root, "toolbox_more", "toolbox_compressed"))
 
 
 def test_format_gmeta():
