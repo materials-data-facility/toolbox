@@ -51,8 +51,8 @@ SEARCH_INDEX_UUIDS = {
     "dlhub": "847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
     "dlhub-test": "5c89e0a9-00e5-4171-b415-814fe4d0b8af"
 }
-CONNECT_SERVICE_LOC = "https://18.233.85.14:5000"
-CONNECT_DEV_LOC = "https://34.193.81.207:5000"
+CONNECT_SERVICE_LOC = "https://api.materialsdatafacility.org"
+CONNECT_DEV_LOC = "https://dev-api.materialsdatafacility.org"
 CONNECT_CONVERT_ROUTE = "/convert"
 CONNECT_STATUS_ROUTE = "/status/"
 DEFAULT_INTERVAL = 1 * 60  # 1 minute, in seconds
@@ -1298,9 +1298,7 @@ class MDFConnectClient:
         headers = {}
         self.__authorizer.set_authorization_header(headers)
         res = requests.post(self.service_loc+self.convert_route,
-                            json=submission, headers=headers,
-                            # TODO: Remove after cert in place
-                            verify=False)
+                            json=submission, headers=headers)
         try:
             json_res = res.json()
         except json.JSONDecodeError:
@@ -1338,9 +1336,7 @@ class MDFConnectClient:
         headers = {}
         self.__authorizer.set_authorization_header(headers)
         res = requests.get(self.service_loc+self.status_route+(source_id or self.source_id),
-                           headers=headers,
-                           # TODO: Remove after cert in place
-                           verify=False)
+                           headers=headers)
         try:
             json_res = res.json()
         except json.JSONDecodeError:
