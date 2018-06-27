@@ -1,17 +1,14 @@
 from datetime import datetime
 import json
 import os
-import re
 import requests
 import shutil
-import sys
 import time
 
 from globus_nexus_client import NexusClient
 import globus_sdk
 from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
-from tqdm import tqdm
 
 
 KNOWN_SCOPES = {
