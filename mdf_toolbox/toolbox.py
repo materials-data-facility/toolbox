@@ -391,42 +391,8 @@ def anonymous_login(services):
 # * File utilities
 # *************************************************
 
-def find_files(root, file_pattern=None, verbose=False):
-    """Find files recursively in a given directory.
-
-    Arguments:
-    root (str): The path to the starting (root) directory.
-    file_pattern (str): A regular expression to match files against, or None to match all files.
-                        Default None.
-    verbose: If True, will print_ status messages.
-             If False, will remain silent unless there is an error.
-             Default False.
-
-    Yields:
-    dict: The matching file's path information.
-        Contains:
-        path (str): The path to the directory containing the file.
-        no_root_path (str): The path to the directory containing the file,
-                            with the path to the root directory removed.
-        filename (str): The name of the file.
-    """
-    if not os.path.exists(root):
-        raise ValueError("Path '" + root + "' does not exist.")
-    # Add separator to end of root if not already supplied
-    root += os.sep if root[-1:] != os.sep else ""
-    for path, dirs, files in tqdm(os.walk(root), desc="Finding files", disable=(not verbose)):
-        for one_file in files:
-            if not file_pattern or re.search(file_pattern, one_file):
-                yield {
-                    "path": path,
-                    "filename": one_file,
-                    "no_root_path": path.replace(root, "")
-                    }
-
-
 def uncompress_tree(root, delete_archives=False):
-    """IMPORTANT: Only compatible with Python 3.
-    Uncompress all tar, zip, and gzip archives under a given directory.
+    """Uncompress all tar, zip, and gzip archives under a given directory.
     Archives will be extracted to a sibling directory named after the archive (minus extension).
     This process can be slow, depending on the number and size of archives.
 
@@ -440,13 +406,10 @@ def uncompress_tree(root, delete_archives=False):
         success (bool): If the extraction succeeded.
         num_extracted (int): Number of archives extracted.
     """
-    if sys.version_info.major < 3:
-        raise NotImplementedError("uncompress_tree is only available in Python 3.\n"
-                                  "Please consider upgrading.")
     num_extracted = 0
     # Start list of dirs to extract with root
     # Later, add newly-created dirs with extracted files, because os.walk will miss them
-    extract_dirs = [os.path.abspath(root)]
+    extract_dirs = [os.path.abspath(os.path.expanduser(root))]
     while len(extract_dirs) > 0:
         for path, dirs, files in os.walk(extract_dirs.pop()):
             for filename in files:
@@ -1178,7 +1141,7 @@ class MDFConnectClient:
         service (str): The integrated service to submit your dataset to.
                        Connected services include:
                         globus_publish (publication with DOI minting)
-                        citrine (industry-partnered machine-learning specialists)\
+                        citrine (industry-partnered machine-learning specialists)
         parameters (dict): Optional, service-specific parameters.
             For globus_publish:
                 collection_id (int): The collection for submission. Overwrites collection_name.

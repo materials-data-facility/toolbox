@@ -111,60 +111,6 @@ def test_anonymous_login(capsys):
     assert "Error: No known client for 'invalid' service." in out
 
 
-def test_find_files():
-    root = os.path.join(os.path.dirname(__file__), "testing_files")
-    # Get everything
-    res1 = list(mdf_toolbox.find_files(root))
-    fn1 = [r["filename"] for r in res1]
-    assert all([name in fn1 for name in [
-                "2_toolbox.txt",
-                "3_toolbox_3.txt",
-                "4toolbox4.txt",
-                "6_toolbox.dat",
-                "toolbox_1.txt",
-                "toolbox_5.csv",
-                "txttoolbox.csv",
-                "toolbox_compressed.tar"
-                ]])
-    # Check paths and no_root_paths
-    for res in res1:
-        assert res["path"] == os.path.join(root, res["no_root_path"])
-        assert os.path.isfile(os.path.join(res["path"], res["filename"]))
-
-    # Get everything (by regex)
-    res2 = list(mdf_toolbox.find_files(root, "toolbox"))
-    fn2 = [r["filename"] for r in res2]
-    correct2 = [
-        "2_toolbox.txt",
-        "3_toolbox_3.txt",
-        "4toolbox4.txt",
-        "6_toolbox.dat",
-        "toolbox_1.txt",
-        "toolbox_5.csv",
-        "txttoolbox.csv",
-        "toolbox_compressed.tar"
-        ]
-    fn2.sort()
-    correct2.sort()
-    assert fn2 == correct2
-
-    # Get only txt files
-    res3 = list(mdf_toolbox.find_files(root, "txt$"))
-    fn3 = [r["filename"] for r in res3]
-    correct3 = [
-        "2_toolbox.txt",
-        "3_toolbox_3.txt",
-        "4toolbox4.txt",
-        "toolbox_1.txt"]
-    fn3.sort()
-    correct3.sort()
-    assert fn3 == correct3
-
-    # Test error
-    with pytest.raises(ValueError):
-        next(mdf_toolbox.find_files("/this/is/not/a/valid/path"))
-
-
 def test_uncompress_tree():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
     # Basic test, should extract tar and nested tar, but not delete anything

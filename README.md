@@ -4,3 +4,5 @@
 
 
 Toolbox is a collection of the Materials Data Facility tools and utilities.
+
+Jupyter notebook tutorials for using the MDF Toolbox, including the MDFConnectClient, can be found in docs/tutorials.
