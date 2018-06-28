@@ -1094,6 +1094,7 @@ class MDFConnectClient:
                          json
                          csv
                          yaml
+                         xml
                          excel
         mapping (dict): The mapping of MDF fields to your data type's fields.
                         It is strongly recommended that you use "dot notation",
