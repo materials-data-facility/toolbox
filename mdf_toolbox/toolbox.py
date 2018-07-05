@@ -928,6 +928,8 @@ class MDFConnectClient:
             if not isinstance(affs, list):
                 affs = [affs]
 
+            family = family.strip()
+            given = given.strip()
             creator = {
                 "creatorName": family + ", " + given,
                 "familyName": family,
