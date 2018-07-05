@@ -28,9 +28,9 @@ def test_create_dc_block():
     assert mdf.dc == {
         'creators': [{
             'affiliations': ['UChicago'],
-            'creatorName': 'Data Facility,  Materials',
+            'creatorName': 'Data Facility, Materials',
             'familyName': 'Data Facility',
-            'givenName': ' Materials'
+            'givenName': 'Materials'
         }],
         'descriptions': [{
             'description': 'This is a test',
@@ -73,15 +73,15 @@ def test_create_dc_block():
     assert mdf.dc == {
         'creators': [{
                 'affiliations': ['UChicago', 'Argonne'],
-                'creatorName': 'Data Facility,  Materials',
+                'creatorName': 'Data Facility, Materials',
                 'familyName': 'Data Facility',
-                'givenName': ' Materials'
+                'givenName': 'Materials'
             },
             {
                 'affiliations': ['UChicago', 'Argonne'],
-                'creatorName': 'Blaiszik,  Ben',
+                'creatorName': 'Blaiszik, Ben',
                 'familyName': 'Blaiszik',
-                'givenName': ' Ben'
+                'givenName': 'Ben'
             },
             {
                 'affiliations': ['UChicago', 'Argonne'],
@@ -135,9 +135,9 @@ def test_create_dc_block():
                 'givenName': 'Senior'
             },
             {
-                'creatorName': 'Programmer,  Junior',
+                'creatorName': 'Programmer, Junior',
                 'familyName': 'Programmer',
-                'givenName': ' Junior'
+                'givenName': 'Junior'
             }
         ],
         'publicationYear': '2018',
