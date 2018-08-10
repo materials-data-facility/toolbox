@@ -554,7 +554,8 @@ def translate_index(index_name):
 # *************************************************
 
 def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
-                    interval=DEFAULT_INTERVAL, inactivity_time=DEFAULT_INACTIVITY_TIME):
+                    interval=DEFAULT_INTERVAL, inactivity_time=DEFAULT_INACTIVITY_TIME,
+                    notify=True):
     """Perform a Globus Transfer.
 
     Arguments:
@@ -570,6 +571,10 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
                     Default DEFAULT_INTERVAL. Minimum 1.
     inactivity_time (int): Number of seconds a Transfer is allowed to go without progress
                            before being cancelled. Default DEFAULT_INACTIVITY_TIME.
+    notify (bool): When True, trigger a notification email from Globus to the user when
+                   the Transfer succeeds or fails.
+                   When False, disbale the notification.
+                   Default True.
 
     Yields:
     dict: An error from the transfer, or (last) a success status
@@ -587,7 +592,9 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
         interval = 1
     deadline = datetime.utcfromtimestamp(int(time.time()) + inactivity_time)
     tdata = globus_sdk.TransferData(transfer_client, source_ep, dest_ep,
-                                    deadline=deadline, verify_checksum=True)
+                                    deadline=deadline, verify_checksum=True,
+                                    notify_on_succeeded=notify, notify_on_failed=notify,
+                                    notify_on_inactive=notify)
     for item in path_list:
         # Is not directory
         if item[0][-1] != "/" and item[1][-1] != "/":
@@ -642,7 +649,8 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
     yield task
 
 
-def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None, retries=10):
+def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None, retries=10,
+                   notify=True):
     """Perform a Globus Transfer and monitor for success.
 
     Arguments:
@@ -664,6 +672,10 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None
                    -1 for infinite tries (Transfer still fails after a period of no activity).
                    None is synonymous with 0.
                    Default 10.
+    notify (bool): When True, trigger a notification email from Globus to the user when
+                   the Transfer succeeds or fails.
+                   When False, disbale the notification.
+                   Default True.
 
     Returns:
     str: ID of the Globus Transfer.
@@ -672,7 +684,7 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None
         retries = 0
     iterations = 0
 
-    transfer = custom_transfer(transfer_client, source_ep, dest_ep, path_list)
+    transfer = custom_transfer(transfer_client, source_ep, dest_ep, path_list, notify=notify)
     res = next(transfer)
     try:
         # Loop ends on StopIteration from generator exhaustion
