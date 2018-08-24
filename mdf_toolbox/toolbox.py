@@ -1258,19 +1258,16 @@ class MDFConnectClient:
         """
         # Ensure resubmit matches reality
         if not resubmit and self.source_id:
-            print("You have already submitted this dataset.")
-            return None
+            return None, False, "You have already submitted this dataset."
         elif resubmit and not self.source_id:
-            print("You have not already submitted this dataset.")
-            return None
+            return None, False, "You have not already submitted this dataset."
 
         if not submission:
             submission = self.get_submission()
 
         # Check for required data
         if not submission["dc"] or not submission["data"]:
-            print("You must populate the dc and data blocks before submission.")
-            return None
+            return None, False, "You must populate the dc and data blocks before submission."
 
         # Make the request
         headers = {}
