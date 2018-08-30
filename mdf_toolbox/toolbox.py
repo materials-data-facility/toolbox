@@ -1249,25 +1249,39 @@ class MDFConnectClient:
                       Default False.
 
         Returns:
-        bool: Whether the submission was successful
-        str: The source_id of your dataset. This is also saved in self.source_id.
-               The source_id is the source_name plus the version.
-               In other words, source_name is unique to your dataset,
-               and source_id is unique to your submission of the dataset.
-        str: Error message, if given
+            A dictionary with the following keys:
+                success (bool): Whether the submission was successful
+                source_id (string): The source_id of your dataset, also saved in self.source_id.
+                   The source_id is the source_name plus the version.
+                   In other words, source_name is unique to your dataset,
+                   and source_id is unique to your submission of the dataset.
+                error_message (string): Error message, if given
         """
         # Ensure resubmit matches reality
         if not resubmit and self.source_id:
-            return None, False, "You have already submitted this dataset."
+            return {
+                'source_id': None,
+                'success': False,
+                'error_message': "You have already submitted this dataset."
+                                 " Set resubmit=True to resubmit it"
+            }
         elif resubmit and not self.source_id:
-            return None, False, "You have not already submitted this dataset."
+            return {
+                'source_id': None,
+                'success': False,
+                'error_message': "You have not already submitted this dataset, cannot resubmit."
+            }
 
         if not submission:
             submission = self.get_submission()
 
         # Check for required data
         if not submission["dc"] or not submission["data"]:
-            return None, False, "You must populate the dc and data blocks before submission."
+            return {
+                'source_id': None,
+                'success': False,
+                'error_message': "You must populate the dc and data blocks before submission."
+            }
 
         # Make the request
         headers = {}
@@ -1296,7 +1310,11 @@ class MDFConnectClient:
             self.reset_submission()
 
         # Return results
-        return source_id, success, error
+        return {
+            'source_id': source_id,
+            'success': success,
+            'error_message': error
+        }
 
     def check_status(self, source_id=None, raw=False):
         """Check the status of your submission.
