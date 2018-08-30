@@ -1249,47 +1249,72 @@ class MDFConnectClient:
                       Default False.
 
         Returns:
-        str: The source_id of your dataset. This is also saved in self.source_id.
-             The source_id is the source_name plus the version.
-             In other words, source_name is unique to your dataset,
-             and source_id is unique to your submission of the dataset.
+            A dictionary with the following keys:
+                success (bool): Whether the submission was successful
+                source_id (string): The source_id of your dataset, also saved in self.source_id.
+                   The source_id is the source_name plus the version.
+                   In other words, source_name is unique to your dataset,
+                   and source_id is unique to your submission of the dataset.
+                error_message (string): Error message, if given
         """
         # Ensure resubmit matches reality
         if not resubmit and self.source_id:
-            print("You have already submitted this dataset.")
-            return None
+            return {
+                'source_id': None,
+                'success': False,
+                'error_message': "You have already submitted this dataset."
+                                 " Set resubmit=True to resubmit it"
+            }
         elif resubmit and not self.source_id:
-            print("You have not already submitted this dataset.")
-            return None
+            return {
+                'source_id': None,
+                'success': False,
+                'error_message': "You have not already submitted this dataset, cannot resubmit."
+            }
 
         if not submission:
             submission = self.get_submission()
 
         # Check for required data
         if not submission["dc"] or not submission["data"]:
-            print("You must populate the dc and data blocks before submission.")
-            return None
+            return {
+                'source_id': None,
+                'success': False,
+                'error_message': "You must populate the dc and data blocks before submission."
+            }
 
+        # Make the request
         headers = {}
         self.__authorizer.set_authorization_header(headers)
         res = requests.post(self.service_loc+self.convert_route,
                             json=submission, headers=headers)
+
+        # Interpret whether the result was successful
+        success = True
+        error = None
         try:
             json_res = res.json()
         except json.JSONDecodeError:
-            print("Error decoding {} response: {}".format(res.status_code, res.content))
+            success = False
+            error = "Error decoding {} response: {}".format(res.status_code, res.content)
         else:
             if res.status_code < 300:
                 self.source_id = json_res["source_id"]
             else:
-                print("Error {} submitting dataset: {}".format(res.status_code, json_res))
+                error = "Error {} submitting dataset: {}".format(res.status_code, json_res)
+                success = False
 
-        if not reset:
-            return self.source_id
-        else:
-            source_id = self.source_id
+        # Prepare the output
+        source_id = self.source_id
+        if reset:
             self.reset_submission()
-            return source_id
+
+        # Return results
+        return {
+            'source_id': source_id,
+            'success': success,
+            'error_message': error
+        }
 
     def check_status(self, source_id=None, raw=False):
         """Check the status of your submission.
