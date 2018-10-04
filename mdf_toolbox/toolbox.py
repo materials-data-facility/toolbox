@@ -14,6 +14,7 @@ try:
     from mdf_connect_client import MDFConnectClient
 except ImportError:
     print("Proceeding without mdf_connect_client")
+    MDFConnectClient = None
 
 
 KNOWN_SCOPES = {
