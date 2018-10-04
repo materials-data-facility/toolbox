@@ -417,6 +417,74 @@ def test_dict_merge():
         mdf_toolbox.dict_merge([], [])
 
 
+def test_insensitive_comparison():
+    # Correct results:
+    # dbase == d1 always
+    # dbase == d2 iff string_insensitive=True
+    # dbase == d3 iff type_insensitive=True
+    # dbase == d4 never (extra dict key)
+    # dbase == d5 never (extra list item)
+    # dbase == d6 never (float not equal)
+    dbase = {
+        "aaa": ["a", "zzz", 4, 5, "QQzz"],
+        "ccc": "AAAABBBBCCCC",
+        "bbb": 50.00000000000,
+        "www": (1, 2, 9, 4, 5, "F")
+    }
+    d1 = {
+        "bbb": 50.0,
+        "aaa": ["a", 5, 4, "zzz", "QQzz"],
+        "www": (2, 1, 9, 5, "F", 4),
+        "ccc": "AAAABBBBCCCC"
+    }
+    d2 = {
+        "aaa": ["a", "zzz", 4, 5, "zzqq"],
+        "ccc": "aaaaBBBBCCCC",
+        "bbb": 50.00000000000,
+        "www": (1, 2, 9, 4, 5, "f")
+    }
+    d3 = {
+        "aaa": ("a", "zzz", 4, 5, "QQzz"),
+        "ccc": "AAAABBBBCCCC",
+        "bbb": 50.00000000000,
+        "www": [1, 2, 9, 4, 5, "F"]
+    }
+    d4 = {
+        "aaa": ["a", "zzz", 4, 5, "QQzz"],
+        "ccc": "AAAABBBBCCCC",
+        "bbb": 50.00000000000,
+        "www": (1, 2, 9, 4, 5, "F"),
+        "zzz": "abc"
+    }
+    d5 = {
+        "aaa": ["a", "zzz", 4, 5, "QQzz", "zzz"],
+        "ccc": "AAAABBBBCCCC",
+        "bbb": 50.00000000000,
+        "www": (1, 2, 9, 4, 5, "F")
+    }
+    d6 = {
+        "aaa": ["a", "zzz", 4, 5, "QQzz"],
+        "ccc": "AAAABBBBCCCC",
+        "bbb": 50.1,
+        "www": (1, 2, 9, 4, 5, "F")
+    }
+
+    assert mdf_toolbox.insensitive_comparison(dbase, d1) is True
+    assert mdf_toolbox.insensitive_comparison(dbase, d2) is False
+    assert mdf_toolbox.insensitive_comparison(dbase, d2, string_insensitive=True) is True
+    assert mdf_toolbox.insensitive_comparison(dbase, d3) is False
+    assert mdf_toolbox.insensitive_comparison(dbase, d3, type_insensitive=True) is True
+    assert mdf_toolbox.insensitive_comparison(dbase, d4) is False
+    assert mdf_toolbox.insensitive_comparison(dbase, d4, string_insensitive=True,
+                                              type_insensitive=True) is False
+    assert mdf_toolbox.insensitive_comparison(dbase, d5) is False
+    assert mdf_toolbox.insensitive_comparison(dbase, d5, string_insensitive=True,
+                                              type_insensitive=True) is False
+    assert mdf_toolbox.insensitive_comparison(dbase, d6) is False
+    assert mdf_toolbox.insensitive_comparison(dbase, d6, string_insensitive=True,
+                                              type_insensitive=True) is False
+
+
 def test_DataPublicationClient():
     # TODO
     pass
