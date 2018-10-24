@@ -422,7 +422,7 @@ def uncompress_tree(root, delete_archives=False):
                 except shutil.ReadError:
                     # ReadError means is not an (extractable) archive
                     pass
-                except Exception as e:
+                except Exception:
                     error_files.append(os.path.join(path, filename))
                 else:
                     num_extracted += 1
