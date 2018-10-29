@@ -404,8 +404,10 @@ def uncompress_tree(root, delete_archives=False):
     dict: Results.
         success (bool): If the extraction succeeded.
         num_extracted (int): Number of archives extracted.
+        files_errored (list of str): The files that threw an unexpected exception when extracted.
     """
     num_extracted = 0
+    error_files = []
     # Start list of dirs to extract with root
     # Later, add newly-created dirs with extracted files, because os.walk will miss them
     extract_dirs = [os.path.abspath(os.path.expanduser(root))]
@@ -420,6 +422,8 @@ def uncompress_tree(root, delete_archives=False):
                 except shutil.ReadError:
                     # ReadError means is not an (extractable) archive
                     pass
+                except Exception:
+                    error_files.append(os.path.join(path, filename))
                 else:
                     num_extracted += 1
                     # Add new dir to list of dirs to process
@@ -428,7 +432,8 @@ def uncompress_tree(root, delete_archives=False):
                         os.remove(archive_path)
     return {
         "success": True,
-        "num_extracted": num_extracted
+        "num_extracted": num_extracted,
+        "files_errored": error_files
     }
 
 

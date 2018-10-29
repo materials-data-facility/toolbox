@@ -114,7 +114,11 @@ def test_anonymous_login(capsys):
 def test_uncompress_tree():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
     # Basic test, should extract tar and nested tar, but not delete anything
-    mdf_toolbox.uncompress_tree(root)
+    # Also should error on known-bad-weird archive
+    res = mdf_toolbox.uncompress_tree(root)
+    assert res["success"]
+    assert res["num_extracted"] == 2
+    assert res["files_errored"] == [os.path.join(root, "toolbox_more", "toolbox_error.tar.gz")]
     lv1_txt = os.path.join(root, "toolbox_more", "toolbox_compressed", "tlbx_uncompressed.txt")
     assert os.path.isfile(lv1_txt)
     lv2_txt = os.path.join(root, "toolbox_more", "toolbox_compressed", "toolbox_nested",
@@ -132,6 +136,7 @@ def test_uncompress_tree():
 
     # Clean up
     shutil.rmtree(os.path.join(root, "toolbox_more", "toolbox_compressed"))
+    shutil.rmtree(os.path.join(root, "toolbox_more", "toolbox_error.tar/"))
 
 
 def test_format_gmeta():
