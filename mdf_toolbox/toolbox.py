@@ -617,7 +617,7 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
         # Check if dest path is directory
         dest_exists = False
         try:
-            transfer_client.operation_ls(dest_ep, item[1])
+            transfer_client.operation_ls(dest_ep, path=item[1])
             dest_exists = True
             dest_is_dir = True
         except globus_sdk.exc.TransferAPIError as e:
