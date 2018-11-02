@@ -571,7 +571,6 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
     dest_ep (str): The destination Globus Endpoint ID.
     path_list (list of tuple of 2 str): A list of tuples containing the paths to transfer as
                                         (source, destination).
-        Directory paths must end in a slash, and file paths must not.
         Example: [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
                   ("/source/all_reports/", "/dest/reports/")]
     interval (int): Number of seconds to wait before polling Transfer status.
@@ -603,15 +602,49 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
                                     notify_on_succeeded=notify, notify_on_failed=notify,
                                     notify_on_inactive=notify)
     for item in path_list:
-        # Is not directory
-        if item[0][-1] != "/" and item[1][-1] != "/":
-            tdata.add_item(item[0], item[1])
-        # Is directory
-        elif item[0][-1] == "/" and item[1][-1] == "/":
+        # Check if source path is directory or missing
+        try:
+            transfer_client.operation_ls(source_ep, item[0])
+            source_is_dir = True
+        except globus_sdk.exc.TransferAPIError as e:
+            if e.code == "ExternalError.DirListingFailed.NotDirectory":
+                source_is_dir = False
+            elif e.code == "ClientError.NotFound":
+                raise globus_sdk.GlobusError("Path '{}' not found on source endpoint '{}'"
+                                             .format(item[0], source_ep))
+            else:
+                raise
+        # Check if dest path is directory
+        dest_exists = False
+        try:
+            transfer_client.operation_ls(dest_ep, item[1])
+            dest_exists = True
+            dest_is_dir = True
+        except globus_sdk.exc.TransferAPIError as e:
+            if e.code == "ExternalError.DirListingFailed.NotDirectory":
+                dest_exists = True
+                dest_is_dir = False
+            elif e.code == "ClientError.NotFound":
+                # Destination will be created, not an issue if not found
+                pass
+            else:
+                raise
+        # Transfer dir
+        # Short-circuit OR/AND eval means if not dest_exists, dest_is_dir can be unassigned
+        if source_is_dir and (not dest_exists or dest_is_dir):
             tdata.add_item(item[0], item[1], recursive=True)
-        # Malformed
+        # Transfer non-dir
+        elif not source_is_dir and (not dest_exists or not dest_is_dir):
+            tdata.add_item(item[0], item[1])
+        # Transfer non-dir into dir
+        # TODO: Is this logic user-friendly or is it surprising?
+        # Take non-dir source filename, Transfer to dest dir+filename
+        elif not source_is_dir and (dest_exists and dest_is_dir):
+            new_dest = os.path.join(item[1], os.path.basename(item[0]))
+            tdata.add_item(item[0], new_dest)
+        # Malformed - Cannot transfer dir into non-dir
         else:
-            raise globus_sdk.GlobusError("Cannot transfer file to directory or vice-versa: "
+            raise globus_sdk.GlobusError("Cannot transfer a directory into a file: "
                                          + str(item))
 
     res = transfer_client.submit_transfer(tdata)
@@ -666,7 +699,6 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None
     dest_ep (str): The destination Globus Endpoint ID.
     path_list (list of tuple of 2 str): A list of tuples containing the paths to transfer as
                                         (source, destination).
-        Directory paths must end in a slash, and file paths must not.
         Example: [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
                   ("/source/all_reports/", "/dest/reports/")]
     interval (int): Number of seconds to wait before polling Transfer status.
