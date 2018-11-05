@@ -604,7 +604,7 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
     for item in path_list:
         # Check if source path is directory or missing
         try:
-            transfer_client.operation_ls(source_ep, item[0])
+            transfer_client.operation_ls(source_ep, path=item[0])
             source_is_dir = True
         except globus_sdk.exc.TransferAPIError as e:
             if e.code == "ExternalError.DirListingFailed.NotDirectory":
