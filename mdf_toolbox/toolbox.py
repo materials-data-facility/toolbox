@@ -607,13 +607,49 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
             transfer_client.operation_ls(source_ep, path=item[0])
             source_is_dir = True
         except globus_sdk.exc.TransferAPIError as e:
+            # If error indicates path exists but is not dir, is not dir
             if e.code == "ExternalError.DirListingFailed.NotDirectory":
                 source_is_dir = False
+            # Too many files in dir indicates is dir
+            elif e.code == "ExternalError.DirListingFailed.SizeLimit":
+                source_is_dir = True
+            # Not found is real error
             elif e.code == "ClientError.NotFound":
                 raise globus_sdk.GlobusError("Path '{}' not found on source endpoint '{}'"
                                              .format(item[0], source_ep))
+            # Else, retry on parent dir
             else:
-                raise
+                try:
+                    parent, item_name = os.path.split(item[0])
+                    parent_ls = transfer_client.operation_ls(source_ep, path=parent)
+                    type_list = [x["type"] for x in parent_ls["DATA"] if x["name"] == item_name]
+                    if len(type_list) < 1:
+                        raise globus_sdk.GlobusError("No items with name '{}' in path '{}' on "
+                                                     "endpoint '{}'"
+                                                     .format(item_name, parent, source_ep))
+                    elif len(type_list) > 1:
+                        raise globus_sdk.GlobusError("Multiple items with name '{}' in path '{}'"
+                                                     "on endpoint '{}'"
+                                                     .format(item_name, parent, source_ep))
+                    item_type = type_list[0]
+                    if item_type == "dir":
+                        source_is_dir = True
+                    elif item_type == "file":
+                        source_is_dir = False
+                    else:
+                        raise ValueError("Path '{}' does not lead to a file or a directory ({})"
+                                         .format(item[0], item_type))
+                except globus_sdk.exc.TransferAPIError as e:
+                    # Size limit means we can't figure out this path
+                    if e.code == "ExternalError.DirListingFailed.SizeLimit":
+                        raise globus_sdk.GlobusError("Unable to check type of {}".format(item[0]))
+                    # Not found is still an error
+                    elif e.code == "ClientError.NotFound":
+                        raise globus_sdk.GlobusError("Parent path '{}' not found on source "
+                                                     "endpoint '{}'".format(item[0], source_ep))
+                    else:
+                        raise
+
         # Check if dest path is directory
         dest_exists = False
         try:
@@ -624,11 +660,44 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
             if e.code == "ExternalError.DirListingFailed.NotDirectory":
                 dest_exists = True
                 dest_is_dir = False
+            elif e.code == "ExternalError.DirListingFailed.SizeLimit":
+                dest_exists = True
+                dest_is_dir = True
             elif e.code == "ClientError.NotFound":
                 # Destination will be created, not an issue if not found
                 pass
             else:
-                raise
+                try:
+                    parent, item_name = os.path.split(item[1])
+                    parent_ls = transfer_client.operation_ls(dest_ep, path=parent)
+                    type_list = [x["type"] for x in parent_ls["DATA"] if x["name"] == item_name]
+                    if len(type_list) < 1:
+                        raise globus_sdk.GlobusError("No items with name '{}' in path '{}' on "
+                                                     "endpoint '{}'"
+                                                     .format(item_name, parent, dest_ep))
+                    elif len(type_list) > 1:
+                        raise globus_sdk.GlobusError("Multiple items with name '{}' in path '{}'"
+                                                     "on endpoint '{}'"
+                                                     .format(item_name, parent, dest_ep))
+                    item_type = type_list[0]
+                    if item_type == "dir":
+                        dest_exists = True
+                        dest_is_dir = True
+                    elif item_type == "file":
+                        dest_exists = True
+                        dest_is_dir = False
+                    else:
+                        # Assume we're overwriting whatever dest is, as if it doesn't exist
+                        pass
+                except globus_sdk.exc.TransferAPIError as e:
+                    # Size limit means we can't figure out this path
+                    if e.code == "ExternalError.DirListingFailed.SizeLimit":
+                        raise globus_sdk.GlobusError("Unable to check type of {}".format(item[0]))
+                    # Not found is not our problem for dest
+                    elif e.code == "ClientError.NotFound":
+                        pass
+                    else:
+                        raise
         # Transfer dir
         # Short-circuit OR/AND eval means if not dest_exists, dest_is_dir can be unassigned
         if source_is_dir and (not dest_exists or dest_is_dir):
