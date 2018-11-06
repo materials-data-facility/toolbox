@@ -56,6 +56,7 @@ SEARCH_INDEX_UUIDS = {
 }
 DEFAULT_INTERVAL = 1 * 60  # 1 minute, in seconds
 DEFAULT_INACTIVITY_TIME = 1 * 24 * 60 * 60  # 1 day, in seconds
+MAX_TIMEOUT = 5 * 60  # 5 minutes
 
 
 # *************************************************
@@ -604,7 +605,20 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
     for item in path_list:
         # Check if source path is directory or missing
         try:
-            transfer_client.operation_ls(source_ep, path=item[0])
+            # Catch timeouts separately
+            try:
+                original_timeout = transfer_client._http_timeout
+                transfer_client.operation_ls(source_ep, path=item[0])
+            except globus_sdk.exc.TransferAPIError as e:
+                # If a timeout occurs, retry with max limit
+                # In the worst case, this just wastes time
+                if e.code == "ExternalError.DirListingFailed.Timeout":
+                    transfer_client._http_timeout = MAX_TIMEOUT
+                    transfer_client.operation_ls(source_ep, path=item[0])
+                else:
+                    raise
+            finally:
+                transfer_client._http_timeout = original_timeout
             source_is_dir = True
         except globus_sdk.exc.TransferAPIError as e:
             # If error indicates path exists but is not dir, is not dir
@@ -621,7 +635,20 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
             else:
                 try:
                     parent, item_name = os.path.split(item[0])
-                    parent_ls = transfer_client.operation_ls(source_ep, path=parent)
+                    # Catch timeouts separately
+                    try:
+                        original_timeout = transfer_client._http_timeout
+                        parent_ls = transfer_client.operation_ls(source_ep, path=parent)
+                    except globus_sdk.exc.TransferAPIError as e:
+                        # If a timeout occurs, retry with max limit
+                        # In the worst case, this just wastes time
+                        if e.code == "ExternalError.DirListingFailed.Timeout":
+                            transfer_client._http_timeout = MAX_TIMEOUT
+                            parent_ls = transfer_client.operation_ls(source_ep, path=parent)
+                        else:
+                            raise
+                    finally:
+                        transfer_client._http_timeout = original_timeout
                     type_list = [x["type"] for x in parent_ls["DATA"] if x["name"] == item_name]
                     if len(type_list) < 1:
                         raise globus_sdk.GlobusError("No items with name '{}' in path '{}' on "
@@ -653,7 +680,20 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
         # Check if dest path is directory
         dest_exists = False
         try:
-            transfer_client.operation_ls(dest_ep, path=item[1])
+            # Catch timeouts separately
+            try:
+                original_timeout = transfer_client._http_timeout
+                transfer_client.operation_ls(dest_ep, path=item[1])
+            except globus_sdk.exc.TransferAPIError as e:
+                # If a timeout occurs, retry with max limit
+                # In the worst case, this just wastes time
+                if e.code == "ExternalError.DirListingFailed.Timeout":
+                    transfer_client._http_timeout = MAX_TIMEOUT
+                    transfer_client.operation_ls(dest_ep, path=item[1])
+                else:
+                    raise
+            finally:
+                transfer_client._http_timeout = original_timeout
             dest_exists = True
             dest_is_dir = True
         except globus_sdk.exc.TransferAPIError as e:
@@ -669,7 +709,20 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
             else:
                 try:
                     parent, item_name = os.path.split(item[1])
-                    parent_ls = transfer_client.operation_ls(dest_ep, path=parent)
+                    # Catch timeouts separately
+                    try:
+                        original_timeout = transfer_client._http_timeout
+                        parent_ls = transfer_client.operation_ls(dest_ep, path=parent)
+                    except globus_sdk.exc.TransferAPIError as e:
+                        # If a timeout occurs, retry with max limit
+                        # In the worst case, this just wastes time
+                        if e.code == "ExternalError.DirListingFailed.Timeout":
+                            transfer_client._http_timeout = MAX_TIMEOUT
+                            parent_ls = transfer_client.operation_ls(dest_ep, path=parent)
+                        else:
+                            raise
+                    finally:
+                        transfer_client._http_timeout = original_timeout
                     type_list = [x["type"] for x in parent_ls["DATA"] if x["name"] == item_name]
                     if len(type_list) < 1:
                         raise globus_sdk.GlobusError("No items with name '{}' in path '{}' on "
