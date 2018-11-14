@@ -950,7 +950,8 @@ def get_local_ep(transfer_client):
 def dict_merge(base, addition):
     """Merge one dictionary with another, recursively.
     Fields present in addition will be added to base.
-    No data in base is deleted or overwritten.
+    No data from base is deleted or overwritten.
+    This function does not modify either dictionary.
 
     Arguments:
     base (dict): The dictionary being added to.
@@ -962,15 +963,16 @@ def dict_merge(base, addition):
     if not isinstance(base, dict) or not isinstance(addition, dict):
         raise TypeError("dict_merge only works with dicts.")
 
+    new_base = deepcopy(base)
     for key, value in addition.items():
         # If the value is a dict, need to merge those
         if isinstance(value, dict):
-            base[key] = dict_merge(base.get(key, {}), value)
+            new_base[key] = dict_merge(new_base.get(key, {}), value)
         # Otherwise, if the key is not in base, add it
-        elif key not in base.keys():
-            base[key] = value
+        elif key not in new_base.keys():
+            new_base[key] = value
 
-    return base
+    return new_base
 
 
 def insensitive_comparison(item1, item2, type_insensitive=False, string_insensitive=False):

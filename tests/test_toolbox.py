@@ -410,7 +410,13 @@ def test_dict_merge():
         }
     }
     # Proper use
+    old_base = deepcopy(base)
+    old_add = deepcopy(add)
     assert mdf_toolbox.dict_merge(base, add) == merged
+    # Originals should be unchanged
+    assert base == old_base
+    assert add == old_add
+
     assert mdf_toolbox.dict_merge({}, {}) == {}
 
     # Check errors
