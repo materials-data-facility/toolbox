@@ -36,11 +36,6 @@ def test_login(capsys, monkeypatch):
     assert isinstance(res2.get("publish"), mdf_toolbox.DataPublicationClient)
     assert isinstance(res2.get("groups"), NexusClient)
 
-    creds3 = deepcopy(credentials)
-    creds3["services"] = "mdf_connect"
-    res3 = mdf_toolbox.login(creds3)
-    assert isinstance(res3.get("mdf_connect"), mdf_toolbox.MDFConnectClient)
-
     # Test fetching previous tokens
     creds = deepcopy(credentials)
     assert mdf_toolbox.login(creds).get("petrel_https_server")

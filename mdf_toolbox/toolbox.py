@@ -10,11 +10,6 @@ from globus_nexus_client import NexusClient
 import globus_sdk
 from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
-try:
-    from mdf_connect_client import MDFConnectClient
-except ImportError:
-    print("Proceeding without mdf_connect_client")
-    MDFConnectClient = None
 
 
 KNOWN_SCOPES = {
@@ -45,7 +40,6 @@ KNOWN_CLIENTS = {
     "search": globus_sdk.SearchClient,
     "search_ingest": globus_sdk.SearchClient,
     #  "publish": DataPublicationClient,  # Defined in this module, added to dict later
-    "mdf_connect": MDFConnectClient,
     "groups": NexusClient
 }
 SEARCH_INDEX_UUIDS = {
