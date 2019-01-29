@@ -22,7 +22,8 @@ KNOWN_SCOPES = {
     "connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
-    "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups"
+    "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups",
+    "dlhub": "https://auth.globus.org/scopes/81fc4156-a623-47f2-93ad-7184118226ba/auth"
 }
 KNOWN_TOKEN_KEYS = {
     "transfer": "transfer.api.globus.org",
@@ -33,7 +34,8 @@ KNOWN_TOKEN_KEYS = {
     "connect": "mdf_dataset_submission",
     "mdf_connect": "mdf_dataset_submission",
     "petrel": "petrel_https_server",
-    "groups": "nexus.api.globus.org"
+    "groups": "nexus.api.globus.org",
+    "dlhub": "dlhub_org"
 }
 KNOWN_CLIENTS = {
     "transfer": globus_sdk.TransferClient,
@@ -52,6 +54,7 @@ SEARCH_INDEX_UUIDS = {
 DEFAULT_INTERVAL = 1 * 60  # 1 minute, in seconds
 DEFAULT_INACTIVITY_TIME = 1 * 24 * 60 * 60  # 1 day, in seconds
 STD_TIMEOUT = 5 * 60  # 5 minutes
+DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
 
 
 # *************************************************
@@ -59,7 +62,7 @@ STD_TIMEOUT = 5 * 60  # 5 minutes
 # *************************************************
 
 def login(credentials=None, app_name=None, services=None, client_id=None, make_clients=True,
-          clear_old_tokens=False, **kwargs):
+          clear_old_tokens=False, token_dir=DEFAULT_CRED_PATH, **kwargs):
     """Login to Globus services
 
     Arguments:
@@ -80,6 +83,8 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
     clear_old_tokens (bool): If True, delete old token file if it exists, forcing user to re-login.
                              If False, use existing token file if there is one.
                              Default False.
+    token_dir (str): The path to the directory to save tokens in and look for
+                     credentials by default. Default DEFAULT_CRED_PATH.
 
     Returns:
     dict: The clients and authorizers requested, indexed by service name.
@@ -90,10 +95,9 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
     """
     NATIVE_CLIENT_ID = "98bfc684-977f-4670-8669-71f8337688e4"
     DEFAULT_CRED_FILENAME = "globus_login.json"
-    DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
 
     def _get_tokens(client, scopes, app_name, force_refresh=False):
-        token_path = os.path.join(DEFAULT_CRED_PATH, app_name + "_tokens.json")
+        token_path = os.path.join(token_dir, app_name + "_tokens.json")
         if force_refresh:
             if os.path.exists(token_path):
                 os.remove(token_path)
@@ -128,7 +132,7 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
                     os.remove(token_path)
         if not os.path.exists(token_path):
             try:
-                os.makedirs(DEFAULT_CRED_PATH)
+                os.makedirs(token_dir)
             except (IOError, OSError):
                 pass
             client.oauth2_start_flow(requested_scopes=scopes, refresh_tokens=True)
@@ -175,7 +179,7 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
                     creds = json.load(cred_file)
             except IOError:
                 try:
-                    with open(os.path.join(DEFAULT_CRED_PATH, DEFAULT_CRED_FILENAME)) as cred_file:
+                    with open(os.path.join(token_dir, DEFAULT_CRED_FILENAME)) as cred_file:
                         creds = json.load(cred_file)
                 except IOError:
                     raise ValueError("Credentials/configuration must be passed as a "
@@ -183,7 +187,7 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
                                      + "or provided in '"
                                      + DEFAULT_CRED_FILENAME
                                      + "' or '"
-                                     + DEFAULT_CRED_PATH
+                                     + token_dir
                                      + "'.")
         app_name = creds.get("app_name")
         services = creds.get("services", services)
@@ -249,13 +253,13 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
 
 
 def confidential_login(credentials=None, client_id=None, client_secret=None, services=None,
-                       make_clients=True):
+                       make_clients=True, token_dir=DEFAULT_CRED_PATH):
     """Login to Globus services as a confidential client (a client with its own login information).
 
     Arguments:
     credentials (str or dict): A string filename, string JSON, or dictionary
                                    with credential and config information.
-                               By default, uses the DEFAULT_CRED_FILENAME and DEFAULT_CRED_PATH.
+                               By default, uses the DEFAULT_CRED_FILENAME and token_dir.
         Contains client_id, client_secret, and services as defined below.
     client_id (str): The ID of the client.
     client_secret (str): The client's secret for authentication.
@@ -264,6 +268,8 @@ def confidential_login(credentials=None, client_id=None, client_secret=None, ser
     make_clients (bool): If True, will make and return appropriate clients with generated tokens.
                          If False, will only return authorizers.
                          Default True.
+    token_dir (str): The path to the directory to save tokens in and look for
+                     credentials by default. Default DEFAULT_CRED_PATH.
 
     Returns:
     dict: The clients and authorizers requested, indexed by service name.
@@ -271,7 +277,6 @@ def confidential_login(credentials=None, client_id=None, client_secret=None, ser
             then the search client will be in the 'search' field.
     """
     DEFAULT_CRED_FILENAME = "confidential_globus_login.json"
-    DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
     # Read credentials if supplied
     if credentials:
         if type(credentials) is str:
@@ -291,13 +296,13 @@ def confidential_login(credentials=None, client_id=None, client_secret=None, ser
                     creds = json.load(cred_file)
             except IOError:
                 try:
-                    with open(os.path.join(DEFAULT_CRED_PATH, DEFAULT_CRED_FILENAME)) as cred_file:
+                    with open(os.path.join(token_dir, DEFAULT_CRED_FILENAME)) as cred_file:
                         creds = json.load(cred_file)
                 except IOError:
                     raise ValueError("Credentials/configuration must be passed as a "
                                      "filename string, JSON string, or dictionary, or provided "
                                      "in '{}' or '{}'.".format(DEFAULT_CRED_FILENAME,
-                                                               DEFAULT_CRED_PATH))
+                                                               token_dir))
         client_id = creds.get("client_id")
         client_secret = creds.get("client_secret")
         services = creds.get("services", services)
