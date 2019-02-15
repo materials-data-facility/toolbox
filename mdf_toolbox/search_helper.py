@@ -118,7 +118,7 @@ class SearchHelper:
         """
         return _clean_query_string(self.__query["q"])
 
-    def __term(self, term):
+    def _term(self, term):
         """Add a term to the query.
 
         Arguments:
@@ -130,7 +130,7 @@ class SearchHelper:
         self.__query["q"] += term
         return self
 
-    def __field(self, field, value):
+    def _field(self, field, value):
         """Add a ``field:value`` term to the query.
         Matches will have the ``value`` in the ``field``.
 
@@ -151,7 +151,7 @@ class SearchHelper:
             self.advanced = True
         return self
 
-    def __operator(self, op, close_group=False):
+    def _operator(self, op, close_group=False):
         """Add an operator between terms.
         There must be a term added before using this method.
         All operators have helpers, so this method is usually not necessary to directly invoke.
@@ -181,7 +181,7 @@ class SearchHelper:
             self.query += op
         return self
 
-    def __and_join(self, close_group=False):
+    def _and_join(self, close_group=False):
         """Combine terms with AND.
         There must be a term added before using this method.
 
@@ -201,10 +201,10 @@ class SearchHelper:
         if not self.initialized:
             raise ValueError("You must add a search term before adding an operator.")
         else:
-            self.__operator("AND", close_group=close_group)
+            self._operator("AND", close_group=close_group)
         return self
 
-    def __or_join(self, close_group=False):
+    def _or_join(self, close_group=False):
         """Combine terms with OR.
         There must be a term added before using this method.
 
@@ -224,19 +224,19 @@ class SearchHelper:
         if not self.initialized:
             raise ValueError("You must add a search term before adding an operator.")
         else:
-            self.__operator("OR", close_group=close_group)
+            self._operator("OR", close_group=close_group)
         return self
 
-    def __negate(self):
+    def _negate(self):
         """Negates the next added term with NOT.
 
         Returns:
             Query: Self
         """
-        self.__operator("NOT")
+        self._operator("NOT")
         return self
 
-    def __add_sort(self, field, ascending=True):
+    def _add_sort(self, field, ascending=True):
         """Sort the search results by a certain field.
 
         If this method is called multiple times, the later sort fields are given lower priority,
