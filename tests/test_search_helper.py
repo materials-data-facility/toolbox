@@ -1,6 +1,9 @@
-import mdf_toolbox
-import pytest
+import re
+
 from globus_sdk import SearchAPIError
+import pytest
+
+import mdf_toolbox
 from mdf_toolbox.search_helper import SearchHelper
 
 
@@ -8,6 +11,10 @@ from mdf_toolbox.search_helper import SearchHelper
 SEARCH_CLIENT = mdf_toolbox.login(credentials={"app_name": "MDF_Forge",
                                                "services": ["search"]})["search"]
 INDEX = "mdf"
+
+# For purely historical reasons, internal-function tests create a SearchHelper
+# called "q" while external-function tests use "f". This was a meaningful distinction
+# when internal functions were in Query and external in Forge, but is not now.
 
 
 # ***********************************************
@@ -176,7 +183,7 @@ def test_ex_search():
                      q="data")._ex_search(info=True, limit=1)
 
 
-def test_aggregate(capsys):
+def test_aggregate_internal(capsys):
     #TODO
     pass
     '''
@@ -206,6 +213,7 @@ def test_aggregate(capsys):
 
 
 def test_chaining():
+    # Internal
     q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
     q._field("source_name", "cip")
     q._and_join()
@@ -216,6 +224,14 @@ def test_chaining():
             ._and_join()
             ._field("elements", "Al")
             ._ex_search(limit=10000))
+    assert all([r in res2 for r in res1]) and all([r in res1 for r in res2])
+
+    # External
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    f.match_field("source_name", "cip")
+    f.match_field("material.elements", "Al")
+    res1 = f.search()
+    res2 = f.match_field("source_name", "cip").match_field("material.elements", "Al").search()
     assert all([r in res2 for r in res1]) and all([r in res1 for r in res2])
 
 
@@ -245,7 +261,7 @@ def test_clean_query():
     assert q10._clean_query() == "term OR term2"
 
 
-def test_add_sort():
+def test_add_sort_internal():
     # Sort ascending by atomic number
     q = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="mdf.source_name:oqmd", advanced=True)
     q._add_sort('crystal_structure.number_of_atoms', True)
@@ -263,3 +279,261 @@ def test_add_sort():
 # * Externals/user-facing
 # ***********************************************
 
+# Helper
+# Return codes:
+#  -1: No match, the value was never found
+#   0: Exclusive match, no values other than argument found
+#   1: Inclusive match, some values other than argument found
+#   2: Partial match, value is found in some but not all results
+def check_field(res, field, regex):
+    dict_path = ""
+    for key in field.split("."):
+        if key == "[]":
+            dict_path += "[0]"
+        else:
+            dict_path += ".get('{}', {})".format(key, "{}")
+    # If no results, set matches to false
+    all_match = (len(res) > 0)
+    only_match = (len(res) > 0)
+    some_match = False
+    for r in res:
+        vals = eval("r"+dict_path)
+        if vals == {}:
+            vals = []
+        elif type(vals) is not list:
+            vals = [vals]
+        # If a result does not contain the value, no match
+        if regex not in vals and not any([re.search(str(regex), value) for value in vals]):
+            all_match = False
+            only_match = False
+        # If a result contains other values, inclusive match
+        elif len(vals) != 1:
+            only_match = False
+            some_match = True
+        else:
+            some_match = True
+
+    if only_match:
+        # Exclusive match
+        return 0
+    elif all_match:
+        # Inclusive match
+        return 1
+    elif some_match:
+        # Partial match
+        return 2
+    else:
+        # No match
+        return -1
+
+
+def test_match_field():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+
+    # Basic usage
+    f.match_field("mdf.source_name", "khazana_vasp")
+    res1 = f.search()
+    assert check_field(res1, "mdf.source_name", "khazana_vasp") == 0
+
+    # Check that query clears
+    assert f.current_query() == ""
+
+    # Also checking check_field and no-op
+    f.match_field("material.elements", "Al")
+    f.match_field("", "")
+    res2 = f.search()  # Enough so that we'd find at least 1 non-Al example
+    assert check_field(res2, "material.elements", "Al") == 1
+
+
+def test_exclude_field():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    # Basic usage
+    f.exclude_field("material.elements", "Al")
+    f.exclude_field("", "")
+    f.match_field("mdf.source_name", "ab_initio_solute_database")
+    f.match_field("mdf.resource_type", "record")
+    res1 = f.search()
+    assert check_field(res1, "material.elements", "Al") == -1
+
+
+def test_add_sort_external():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    # Sort ascending by atomic number
+    f.match_field("mdf.source_name", "oqmd")
+    f.add_sort('crystal_structure.number_of_atoms', True)
+    res = f.search(limit=1, reset_query=False)
+    assert res[0]['crystal_structure']['number_of_atoms'] == 1
+
+    # Sort descending by composition, with multi-sort
+    f.add_sort('material.composition', False)
+    res = f.search(limit=1)
+    assert res[0]['crystal_structure']['number_of_atoms'] == 1
+    assert res[0]['material']['composition'].startswith('Zr')
+
+
+def test_match_exists():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    # Basic usage
+    f.match_exists("services.citrine")
+    assert check_field(f.search(), "services.citrine", ".*") == 0
+
+
+def test_match_not_exists():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    # Basic usage
+    f.match_not_exists("services.citrine")
+    assert check_field(f.search(), "services.citrine", ".*") == -1
+
+
+def test_match_range():
+    # Single-value use
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    f.match_range("material.elements", "Al", "Al")
+    res1, info1 = f.search(info=True)
+    assert check_field(res1, "material.elements", "Al") == 1
+
+    res2, info2 = f.search("material.elements:Al", advanced=True, info=True)
+    assert info1["total_query_matches"] == info2["total_query_matches"]
+
+    # Non-matching use, test inclusive
+    f.match_range("material.elements", "Al", "Al", inclusive=False)
+    assert f.search() == []
+
+    # Actual range
+    f.match_range("material.elements", "Al", "Cu")
+    res4, info4 = f.search(info=True)
+    assert info1["total_query_matches"] < info4["total_query_matches"]
+    assert (check_field(res4, "material.elements", "Al") >= 0 or
+            check_field(res4, "material.elements", "Cu") >= 0)
+
+    # Nothing to match
+    assert f.match_range("field", start=None, stop=None) == f
+
+
+def test_exclude_range():
+    # Single-value use
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    f.exclude_range("material.elements", "Am", "*")
+    f.exclude_range("material.elements", "*", "Ak")
+    f.match_field("material.elements", "*")
+    res1, info1 = f.search(info=True)
+    assert (check_field(res1, "material.elements", "Al") == 0 or
+            check_field(res1, "material.elements", "Al") == 2)
+
+    res2, info2 = f.search("material.elements:Al", advanced=True, info=True)
+    assert info1["total_query_matches"] <= info2["total_query_matches"]
+
+    # Non-matching use, test inclusive
+    f.exclude_range("material.elements", "Am", "*")
+    f.exclude_range("material.elements", "*", "Ak")
+    f.exclude_range("material.elements", "Al", "Al", inclusive=False)
+    f.match_field("material.elements", "*")
+    res3, info3 = f.search(info=True)
+    assert info1["total_query_matches"] == info3["total_query_matches"]
+
+    # Nothing to match
+    assert f.exclude_range("field", start=None, stop=None) == f
+
+
+def test_exclusive_match():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    f.exclusive_match("material.elements", "Al")
+    res1 = f.search()
+    assert check_field(res1, "material.elements", "Al") == 0
+
+    f.exclusive_match("material.elements", ["Al", "Cu"])
+    res2 = f.search()
+    assert check_field(res2, "material.elements", "Al") == 1
+    assert check_field(res2, "material.elements", "Cu") == 1
+    assert check_field(res2, "material.elements", "Cp") == -1
+    assert check_field(res2, "material.elements", "Fe") == -1
+
+
+def test_search(capsys):
+    # Error on no query
+    with pytest.raises(ValueError):
+        f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+        f.search()
+
+    # Return info if requested
+    res2 = f.search("Al", info=False)
+    assert isinstance(res2, list)
+    assert isinstance(res2[0], dict)
+
+    res3 = f.search("Al", info=True)
+    assert isinstance(res3, tuple)
+    assert isinstance(res3[0], list)
+    assert isinstance(res3[0][0], dict)
+    assert isinstance(res3[1], dict)
+
+    # Check limit
+    res4 = f.match_term("Al").search(limit=3)
+    assert len(res4) == 3
+
+    # Check reset_query
+    f.match_field("mdf.source_name", "ta_melting")
+    res5 = f.search(reset_query=False)
+    res6 = f.search()
+    assert all([r in res6 for r in res5]) and all([r in res5 for r in res6])
+
+    # Check default index
+    f2 = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    assert (f2.match_term("data").search(limit=1, info=True)[1]["index_uuid"] ==
+            mdf_toolbox.translate_index(INDEX))
+
+
+def test_aggregate_external():
+    #TODO
+    pass
+    '''
+    # Test that aggregate uses the current query properly
+    # And returns results
+    # And respects the reset_query arg
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    f.match_field("mdf.source_name", "nist_xps_db")
+    res1 = f.aggregate(reset_query=False, index="mdf")
+    assert len(res1) > 10000
+    assert check_field(res1, "mdf.source_name", "nist_xps_db") == 0
+    res2 = f.aggregate()
+    assert len(res2) == len(res1)
+    assert check_field(res2, "mdf.source_name", "nist_xps_db") == 0
+    '''
+
+
+def test_reset_query():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    # Term will return results
+    f.match_field("material.elements", "Al")
+    f.reset_query()
+
+    # Specifying no query will raise an error
+    with pytest.raises(ValueError):
+        assert f.search() == []
+
+
+def test_current_query():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    # Query.clean_query() is already tested, just need to check basic functionality
+    f.match_field("field", "value")
+    assert f.current_query() == "(field:value)"
+
+
+def test_show_fields():
+    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    res1 = f.show_fields("top")
+    assert "mdf" in res1.keys()
+    res2 = f.show_fields(block="mdf")
+    assert "mdf.source_name" in res2.keys()
+    res3 = f.show_fields()
+    assert "dc.creators.creatorName" in res3.keys()
+
+
+def test_anonymous(capsys):
+    f = SearchHelper(INDEX, anonymous=True)
+    # Test search
+    assert len(f.search("mdf.source_name:ab_initio_solute_database",
+                        advanced=True, limit=300)) == 300
+
+    # Test aggregation
+    #TODO: Reenable
+    #assert len(f.aggregate("mdf.source_name:nist_xps_db")) > 10000

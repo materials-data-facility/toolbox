@@ -187,7 +187,10 @@ class SearchHelper:
         Returns:
             SearchHelper: Self
         """
-        self.__query["q"] += term
+        # All terms must be strings for Elasticsearch
+        term = str(term)
+        if term:
+            self.__query["q"] += term
         return self
 
     def _field(self, field, value):
@@ -204,6 +207,9 @@ class SearchHelper:
         Returns:
             SearchHelper: Self
         """
+        # Fields and values must be strings for Elasticsearch
+        field = str(field)
+        value = str(value)
         # Cannot add field:value if one is blank
         if field and value:
             self.__query["q"] += field + ":" + value
@@ -308,10 +314,14 @@ class SearchHelper:
         Returns:
             SearchHelper: Self
         """
-        self.__query["sort"].append({
-            'field_name': field,
-            'order': 'asc' if ascending else 'desc'
-        })
+        # Fields must be strings for Elasticsearch
+        field = str(field)
+        # No-op on blank sort field
+        if field:
+            self.__query["sort"].append({
+                'field_name': field,
+                'order': 'asc' if ascending else 'desc'
+            })
         return self
 
     def _ex_search(self, limit=None, info=False, retries=3):
@@ -381,25 +391,52 @@ class SearchHelper:
             res = (res[0], info_dict)
         return res
 
-    def _mapping(self, index):
+    def _mapping(self):
         """Fetch the entire mapping for the specified index.
-
-        Arguments:
-            index (str): The index to map.
 
         Returns:
             dict: The full mapping for the index.
         """
         return (self.__search_client.get(
-                    "/unstable/index/{}/mapping".format(mdf_toolbox.translate_index(index)))
+                    "/unstable/index/{}/mapping".format(mdf_toolbox.translate_index(self.index)))
                 ["mappings"])
 
     # ************************************************************************************
     # * Query-building functions
     # ************************************************************************************
-    # Note: Only match_field, exclude_field, and add_sort directly modify the query.
-    #       The other helpers use those core functions for advanced behavior.
+    # Note: Only match_term, match_field, exclude_field, and add_sort directly modify
+    #       the query. The other helpers use those core functions for advanced behavior.
     # ************************************************************************************
+
+    def match_term(self, value, required=True, new_group=False):
+        """Add a fulltext search term to the query.
+
+        Warning:
+            Do not use this method with any other query-building helpers. This method
+            is only for building fulltext queries (in non-advanced mode). Using other
+            helpers, such as ``match_field()``, will cause the query to run in advanced mode.
+            If a fulltext term query is run in advanced mode, it will have unexpected
+            results.
+
+        Arguments:
+            value (str): The term to match.
+            required (bool): If ``True``, will add term with ``AND``.
+                    If ``False``, will use ``OR``. **Default:** ``True``.
+            new_group (bool): If ``True``, will separate the term into a new parenthetical group.
+                    If ``False``, will not.
+                    **Default:** ``False``.
+
+        Returns:
+            SearchHelper: Self
+        """
+        # If not the start of the query string, add an AND or OR
+        if self.initialized:
+            if required:
+                self._and_join(new_group)
+            else:
+                self._or_join(new_group)
+        self._term(value)
+        return self
 
     def match_field(self, field, value, required=True, new_group=False):
         """Add a ``field:value`` term to the query.
@@ -421,16 +458,13 @@ class SearchHelper:
         Returns:
             SearchHelper: Self
         """
-        # No-op on missing arguments
-        if not field and not value:
-            return self
         # If not the start of the query string, add an AND or OR
         if self.initialized:
             if required:
                 self._and_join(new_group)
             else:
                 self._or_join(new_group)
-        self._field(str(field), str(value))
+        self._field(field, value)
         return self
 
     def exclude_field(self, field, value, new_group=False):
@@ -703,7 +737,7 @@ class SearchHelper:
     # * Query utility functions
     # ************************************************************************************
 
-    def show_fields(self, block=None, index=None):
+    def show_fields(self, block=None):
         """Retrieve and return the mapping for the given metadata block.
 
         Arguments:
@@ -716,9 +750,7 @@ class SearchHelper:
         Returns:
             dict: ``field:datatype`` pairs.
         """
-        if not index:
-            index = self.index
-        mapping = self.__query.mapping(index=index)
+        mapping = self._mapping()
         if block is None:
             return mapping
         elif block == "top":
