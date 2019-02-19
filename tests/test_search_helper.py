@@ -3,233 +3,263 @@ import pytest
 from globus_sdk import SearchAPIError
 from mdf_toolbox.search_helper import SearchHelper
 
-# Manually logging in for Query testing
+
+# Manually logging in for SearchHelper testing
 SEARCH_CLIENT = mdf_toolbox.login(credentials={"app_name": "MDF_Forge",
                                                "services": ["search"]})["search"]
 INDEX = "mdf"
 
-def test_query_init():
-    q1 = Query(query_search_client)
-    assert q1.query == "("
-    assert q1.advanced is False
+
+# ***********************************************
+# * Static functions
+# ***********************************************
+
+def test_clean_query_string():
+    #TODO
+    pass
+
+
+def test_validate_query():
+    #TODO
+    pass
+
+
+# ***********************************************
+# * Internals
+# ***********************************************
+
+def test_init():
+    q1 = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    assert q1._SearchHelper__query["q"] == "("
+    assert q1._SearchHelper__query["advanced"] is False
     assert q1.initialized is False
 
-    q2 = Query(query_search_client, q="mdf.source_name:oqmd", advanced=True)
-    assert q2.query == "mdf.source_name:oqmd"
-    assert q2.advanced is True
+    q2 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="mdf.source_name:oqmd", advanced=True)
+    assert q2._SearchHelper__query["q"] == "mdf.source_name:oqmd"
+    assert q2._SearchHelper__query["advanced"] is True
     assert q2.initialized is True
 
 
-def test_query_term():
-    q = Query(query_search_client)
+def test_term():
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
     # Single match test
-    assert isinstance(q.term("term1"), Query)
-    assert q.query == "(term1"
+    assert isinstance(q._term("term1"), SearchHelper)
+    assert q._SearchHelper__query["q"] == "(term1"
     assert q.initialized is True
     # Multi-match test
-    q.and_join().term("term2")
-    assert q.query == "(term1 AND term2"
+    q._and_join()._term("term2")
+    assert q._SearchHelper__query["q"] == "(term1 AND term2"
     # Grouping test
-    q.or_join(close_group=True).term("term3")
-    assert q.query == "(term1 AND term2) OR (term3"
+    q._or_join(close_group=True)._term("term3")
+    assert q._SearchHelper__query["q"] == "(term1 AND term2) OR (term3"
 
 
-def test_query_field():
-    q1 = Query(query_search_client)
+def test_field():
+    q1 = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
     # Single field and return value test
-    assert isinstance(q1.field("mdf.source_name", "oqmd"), Query)
-    assert q1.query == "(mdf.source_name:oqmd"
+    assert isinstance(q1._field("mdf.source_name", "oqmd"), SearchHelper)
+    assert q1._SearchHelper__query["q"] == "(mdf.source_name:oqmd"
     # Multi-field and grouping test
-    q1.and_join(close_group=True).field("dc.title", "sample")
-    assert q1.query == "(mdf.source_name:oqmd) AND (dc.title:sample"
+    q1._and_join(close_group=True)._field("dc.title", "sample")
+    assert q1._SearchHelper__query["q"] == "(mdf.source_name:oqmd) AND (dc.title:sample"
     # Negation test
-    q1.negate()
-    assert q1.query == "(mdf.source_name:oqmd) AND (dc.title:sample NOT "
+    q1._negate()
+    assert q1._SearchHelper__query["q"] == "(mdf.source_name:oqmd) AND (dc.title:sample NOT "
     # Explicit operator test
     # Makes invalid query for this case
-    q1.operator("NOT")
-    assert q1.query == "(mdf.source_name:oqmd) AND (dc.title:sample NOT  NOT "
+    q1._operator("NOT")
+    assert q1._SearchHelper__query["q"] == "(mdf.source_name:oqmd) AND (dc.title:sample NOT  NOT "
     # Ensure advanced is set
-    assert q1.advanced
+    assert q1._SearchHelper__query["advanced"] is True
 
     # Test noop on blanks
-    q2 = Query(query_search_client)
-    assert q2.query == "("
-    q2.field(field="", value="value")
-    assert q2.query == "("
-    q2.field(field="field", value="")
-    assert q2.query == "("
-    q2.field(field="", value="")
-    assert q2.query == "("
-    q2.field(field="field", value="value")
-    assert q2.query == "(field:value"
+    q2 = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    assert q2._SearchHelper__query["q"] == "("
+    q2._field(field="", value="value")
+    assert q2._SearchHelper__query["q"] == "("
+    q2._field(field="field", value="")
+    assert q2._SearchHelper__query["q"] == "("
+    q2._field(field="", value="")
+    assert q2._SearchHelper__query["q"] == "("
+    q2._field(field="field", value="value")
+    assert q2._SearchHelper__query["q"] == "(field:value"
 
 
-def test_query_operator(capsys):
-    q = Query(query_search_client)
-    assert q.query == "("
+def test_operator():
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    assert q._SearchHelper__query["q"] == "("
     # Add bad operator
-    assert q.operator("FOO") == q
-    out, err = capsys.readouterr()
-    assert "Error: 'FOO' is not a valid operator" in out
-    assert q.query == "("
+    with pytest.raises(ValueError):
+        assert q._operator("FOO") == q
+    assert q._SearchHelper__query["q"] == "("
     # Test operator cleaning
-    q.operator("   and ")
-    assert q.query == "( AND "
+    q._operator("   and ")
+    assert q._SearchHelper__query["q"] == "( AND "
     # Test close_group
-    q.operator("OR", close_group=True)
-    assert q.query == "( AND ) OR ("
+    q._operator("OR", close_group=True)
+    assert q._SearchHelper__query["q"] == "( AND ) OR ("
 
 
-def test_query_and_join(capsys):
-    q = Query(query_search_client)
+def test_and_join(capsys):
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
     # Test not initialized
     with pytest.raises(ValueError) as excinfo:
-        q.and_join()
+        q._and_join()
     assert 'before adding an operator' in str(excinfo.value)
 
     # Regular join
-    q.term("foo").and_join()
-    assert q.query == "(foo AND "
+    q._term("foo")._and_join()
+    assert q._SearchHelper__query["q"] == "(foo AND "
     # close_group
-    q.term("bar").and_join(close_group=True)
-    assert q.query == "(foo AND bar) AND ("
+    q._term("bar")._and_join(close_group=True)
+    assert q._SearchHelper__query["q"] == "(foo AND bar) AND ("
 
 
-def test_query_or_join(capsys):
-    q = Query(query_search_client)
+def test_or_join(capsys):
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
     # Test not initialized
     with pytest.raises(ValueError) as excinfo:
-        q.or_join()
+        q._or_join()
     assert 'before adding an operator' in str(excinfo.value)
 
     # Regular join
-    q.term("foo").or_join()
-    assert q.query == "(foo OR "
+    q._term("foo")._or_join()
+    assert q._SearchHelper__query["q"] == "(foo OR "
 
     # close_group
-    q.term("bar").or_join(close_group=True)
-    assert q.query == "(foo OR bar) OR ("
+    q._term("bar")._or_join(close_group=True)
+    assert q._SearchHelper__query["q"] == "(foo OR bar) OR ("
 
 
-def test_query_search(capsys):
+def test_ex_search():
     # Error on no query
-    q = Query(query_search_client)
-    with pytest.raises(ValueError) as excinfo:
-        q.search("mdf")
-    assert "Query not set" in str(excinfo.value)
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    with pytest.raises(ValueError):
+        q._ex_search()
 
     # Return info if requested
-    res2 = Query(query_search_client, q="Al").search(index="mdf", info=False)
+    res2 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="Al")._ex_search(info=False)
     assert isinstance(res2, list)
     assert isinstance(res2[0], dict)
-    res3 = Query(query_search_client, q="Al").search(index="mdf", info=True)
+    res3 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="Al")._ex_search(info=True)
     assert isinstance(res3, tuple)
     assert isinstance(res3[0], list)
     assert isinstance(res3[0][0], dict)
     assert isinstance(res3[1], dict)
 
     # Check limit
-    res4 = Query(query_search_client, q="Al").search(index="mdf", info=False, limit=3)
+    res4 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="Al")._ex_search(info=False,
+                                                                               limit=3)
     assert len(res4) == 3
 
     # Check default limits
-    res5 = Query(query_search_client, q="Al").search(index="mdf")
+    res5 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="Al")._ex_search()
     assert len(res5) == 10
-    res6 = Query(query_search_client, q="mdf.source_name:nist_xps_db",
-                 advanced=True).search(index="mdf")
+    res6 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="mdf.source_name:nist_xps_db",
+                        advanced=True)._ex_search()
     assert len(res6) == 10000
 
     # Check limit correction (should throw a warning)
     with pytest.warns(RuntimeWarning):
-        res7 = Query(query_search_client, advanced=True,
-                     q="mdf.source_name:nist_xps_db").search("mdf", limit=20000)
+        res7 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, advanced=True,
+                            q="mdf.source_name:nist_xps_db")._ex_search(limit=20000)
     assert len(res7) == 10000
 
     # Test index translation
     # mdf = 1a57bbe5-5272-477f-9d31-343b8258b7a5
-    res8 = Query(query_search_client, q="data").search(index="mdf", info=True, limit=1)
+    res8 = SearchHelper(INDEX, search_client=SEARCH_CLIENT,
+                        q="data")._ex_search(info=True, limit=1)
     assert len(res8[0]) == 1
-    assert res8[1]["index"] == "mdf"
     assert res8[1]["index_uuid"] == "1a57bbe5-5272-477f-9d31-343b8258b7a5"
     with pytest.raises(SearchAPIError):
-        Query(query_search_client, q="data").search(index="invalid", info=True, limit=1)
+        SearchHelper("notexists", search_client=SEARCH_CLIENT,
+                     q="data")._ex_search(info=True, limit=1)
 
 
-def test_query_aggregate(capsys):
-    q = Query(query_search_client, advanced=True)
+def test_aggregate(capsys):
+    #TODO
+    pass
+    '''
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT, advanced=True)
     # Error on no query
     with pytest.raises(ValueError) as excinfo:
         q.aggregate("mdf")
     assert "Query not set" in str(excinfo.value)
 
     # Basic aggregation
-    q.query = "mdf.source_name:nist_xps_db"
+    q._SearchHelper__query["q"] = "mdf.source_name:nist_xps_db"
     res1 = q.aggregate("mdf")
     assert len(res1) > 10000
     assert isinstance(res1[0], dict)
 
     # Multi-dataset aggregation
-    q.query = "(mdf.source_name:nist_xps_db OR mdf.source_name:khazana_vasp)"
+    q._SearchHelper__query["q"] = "(mdf.source_name:nist_xps_db OR mdf.source_name:khazana_vasp)"
     res2 = q.aggregate(index="mdf")
     assert len(res2) > 10000
     assert len(res2) > len(res1)
 
     # Unnecessary aggregation fallback to .search()
     # Check success in Coveralls
-    q.query = "mdf.source_name:khazana_vasp"
+    q._SearchHelper__query["q"] = "mdf.source_name:khazana_vasp"
     assert len(q.aggregate("mdf")) < 10000
+    '''
 
 
-def test_query_chaining():
-    q = Query(query_search_client)
-    q.field("source_name", "cip")
-    q.and_join()
-    q.field("elements", "Al")
-    res1 = q.search(index="mdf", limit=10000)
-    res2 = (Query(query_search_client)
-            .field("source_name", "cip")
-            .and_join()
-            .field("elements", "Al")
-            .search(index="mdf", limit=10000))
+def test_chaining():
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    q._field("source_name", "cip")
+    q._and_join()
+    q._field("elements", "Al")
+    res1 = q._ex_search(limit=10000)
+    res2 = (SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+            ._field("source_name", "cip")
+            ._and_join()
+            ._field("elements", "Al")
+            ._ex_search(limit=10000))
     assert all([r in res2 for r in res1]) and all([r in res1 for r in res2])
 
 
-def test_query_cleaning():
+def test_clean_query():
     # Imbalanced/improper parentheses
-    q1 = Query(query_search_client, q="() term ")
-    assert q1.clean_query() == "term"
-    q2 = Query(query_search_client, q="(term)(")
-    assert q2.clean_query() == "(term)"
-    q3 = Query(query_search_client, q="(term) AND (")
-    assert q3.clean_query() == "(term)"
-    q4 = Query(query_search_client, q="(term AND term2")
-    assert q4.clean_query() == "(term AND term2)"
-    q5 = Query(query_search_client, q="term AND term2)")
-    assert q5.clean_query() == "(term AND term2)"
-    q6 = Query(query_search_client, q="((((term AND term2")
-    assert q6.clean_query() == "((((term AND term2))))"
-    q7 = Query(query_search_client, q="term AND term2))))")
-    assert q7.clean_query() == "((((term AND term2))))"
+    q1 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="() term ")
+    assert q1._clean_query() == "term"
+    q2 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="(term)(")
+    assert q2._clean_query() == "(term)"
+    q3 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="(term) AND (")
+    assert q3._clean_query() == "(term)"
+    q4 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="(term AND term2")
+    assert q4._clean_query() == "(term AND term2)"
+    q5 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="term AND term2)")
+    assert q5._clean_query() == "(term AND term2)"
+    q6 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="((((term AND term2")
+    assert q6._clean_query() == "((((term AND term2))))"
+    q7 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="term AND term2))))")
+    assert q7._clean_query() == "((((term AND term2))))"
 
     # Correct trailing operators
-    q8 = Query(query_search_client, q="term AND NOT term2 OR")
-    assert q8.clean_query() == "term AND NOT term2"
-    q9 = Query(query_search_client, q="term OR NOT term2 AND")
-    assert q9.clean_query() == "term OR NOT term2"
-    q10 = Query(query_search_client, q="term OR term2 NOT")
-    assert q10.clean_query() == "term OR term2"
+    q8 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="term AND NOT term2 OR")
+    assert q8._clean_query() == "term AND NOT term2"
+    q9 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="term OR NOT term2 AND")
+    assert q9._clean_query() == "term OR NOT term2"
+    q10 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="term OR term2 NOT")
+    assert q10._clean_query() == "term OR term2"
 
 
-def test_query_add_sort():
+def test_add_sort():
     # Sort ascending by atomic number
-    q = Query(query_search_client, q="mdf.source_name:oqmd", advanced=True)
-    q.add_sort('crystal_structure.number_of_atoms', True)
-    res = q.search('mdf', limit=1)
+    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="mdf.source_name:oqmd", advanced=True)
+    q._add_sort('crystal_structure.number_of_atoms', True)
+    res = q._ex_search(limit=1)
     assert res[0]['crystal_structure']['number_of_atoms'] == 1
 
     # Sort descending by composition
-    q.add_sort('material.composition', False)
-    res = q.search('mdf', limit=1)
+    q._add_sort('material.composition', False)
+    res = q._ex_search(limit=1)
     assert res[0]['crystal_structure']['number_of_atoms'] == 1
     assert res[0]['material']['composition'].startswith('Zr')
+
+
+# ***********************************************
+# * Externals/user-facing
+# ***********************************************
+

@@ -75,6 +75,8 @@ def _validate_query(query):
     if query["q"] == BLANK_QUERY["q"]:
         raise ValueError("No query specified.")
 
+    query["q"] = _clean_query_string(query["q"])
+
     # limit should be set to appropriate default if not specified
     if query["limit"] is None:
         query["limit"] = SEARCH_LIMIT if query["advanced"] else NONADVANCED_LIMIT
@@ -86,7 +88,8 @@ def _validate_query(query):
 
     # Remove all blank/default values
     for key, val in BLANK_QUERY.items():
-        if query[key] == val:
+        # Default for get is NaN so comparison is always False
+        if query.get(key, float('nan')) == val:
             query.pop(key)
 
     return query
@@ -143,9 +146,10 @@ class SearchHelper:
         elif kwargs.get("anonymous"):
             self.__search_client = mdf_toolbox.anonymous_login(["search"])["search"]
         else:
-            self.__search_client = mdf_toolbox.login(app_name=kwargs.get("app_name", __app_name),
-                                                     client_id=kwargs.get("client_id", None),
-                                                     services=["search"])["search"]
+            self.__search_client = mdf_toolbox.login(
+                                        app_name=kwargs.get("app_name", self.__app_name),
+                                        client_id=kwargs.get("client_id", None),
+                                        services=["search"])["search"]
 
         # Get the UUID for the index if the name was provided
         self.index = mdf_toolbox.translate_index(index)
@@ -204,7 +208,7 @@ class SearchHelper:
         if field and value:
             self.__query["q"] += field + ":" + value
             # Field matches are advanced queries
-            self.advanced = True
+            self.__query["advanced"] = True
         return self
 
     def _operator(self, op, close_group=False):
@@ -316,8 +320,8 @@ class SearchHelper:
         Uses the query currently in this SearchHelper.
 
         Arguments:
-            limit (int): Maximum number of entries to return. Default 10 for basic queries,
-                and 10000 for advanced.
+            limit (int): Maximum number of entries to return. **Default**: ``10`` for basic
+                queries, and ``10000`` for advanced.
             info (bool): If ``False``, search will return a list of the results.
                     If ``True``, search will return a tuple containing the results list
                     and other information about the query.
@@ -334,6 +338,9 @@ class SearchHelper:
         if not self.initialized:
             raise ValueError('No query has been set.')
 
+        # Create Search-ready query
+        if limit is not None:
+            self.__query["limit"] = limit
         query = _validate_query(self.__query)
 
         tries = 0
@@ -362,10 +369,16 @@ class SearchHelper:
 
         # Add more information to output if requested
         if info:
-            res[1]["query"] = query["q"]
-            res[1]["index_uuid"] = self.index
-            res[1]["retries"] = tries
-            res[1]["errors"] = errors
+            # Add everything from the query itself
+            info_dict = mdf_toolbox.dict_merge(res[1], query)
+            # But rename "q" to "query" for clarity
+            info_dict["query"] = info_dict.pop("q")
+            # Add other useful/interesting parameters
+            info_dict["index_uuid"] = self.index
+            info_dict["retries"] = tries
+            info_dict["errors"] = errors
+            # Remake tuple because tuples don't suport assignment
+            res = (res[0], info_dict)
         return res
 
     def _mapping(self, index):
@@ -682,7 +695,7 @@ class SearchHelper:
         # ._ex_search() not canonical way to perform single-statement search, so not used
         # reset_query is False to skip the unnecessary query reset - SH not needed after search
         else:
-            return SearchHelper(self.__search_client, index=self.index, q=q,
+            return SearchHelper(index=self.index, search_client=self.__search_client, q=q,
                                 advanced=advanced).search(info=info, limit=limit,
                                                           reset_query=False)
 
