@@ -8,7 +8,6 @@ import mdf_toolbox
 from mdf_toolbox.search_helper import (SearchHelper, _validate_query,
                                        BLANK_QUERY, SEARCH_LIMIT)
 
-
 # Manually logging in for SearchHelper testing
 SEARCH_CLIENT = mdf_toolbox.login(credentials={"app_name": "MDF_Forge",
                                                "services": ["search"]})["search"]
@@ -519,6 +518,3 @@ def test_anonymous(capsys):
     # Test search
     assert len(f.search("mdf.source_name:ab_initio_solute_database",
                         advanced=True, limit=300)) == 300
-
-    # Test aggregation
-    assert len(f.aggregate("mdf.source_name:nist_xps_db")) > 10000

@@ -1,4 +1,6 @@
-from mdf_toolbox.search_helper import SEARCH_LIMIT, _validate_query
+import warnings
+
+from mdf_toolbox.search_helper import SEARCH_LIMIT
 
 
 class AggregateMixin:
@@ -7,6 +9,16 @@ class AggregateMixin:
     ``aggregate()`` is currently the only way to retrieve more than 10,000 entries
     from Globus Search, and requires a ``scroll_field`` index field.
     """
+
+    def __init__(self, *args, **kwargs):
+        """Add the AggregateMixin to a SearchHelper.
+
+        Arguments:
+            scroll_field (str): The field on which to scroll. This should be a field
+                    that counts/indexes the entries.
+        """
+        self.scroll_field = kwargs.get("scroll_field", None)
+        super().__init__(*args, **kwargs)
 
     def _aggregate(self, scroll_field, scroll_size=SEARCH_LIMIT):
         """Perform an advanced query, and return *all* matching results.
@@ -24,26 +36,29 @@ class AggregateMixin:
         Returns:
             list of dict: All matching entries.
         """
-        # Warn the user we are changing the setting of advanced
-        if not self.__query["advanced"]:
-            warnings.warn('This query will be run in advanced mode.', RuntimeWarning)
+        # Make sure scroll_field is valid
+        if not scroll_field:
+            raise AttributeError("scroll_field is required.")
 
-        # Make sure the query has been set
-        q = self.clean_query()
-        if not q.strip("()"):
-            raise ValueError('Query not set')
+        # Make sure the query is set
+        if not self.initialized:
+            raise AttributeError('No query has been set.')
+
+        # Warn the user if we are changing the setting of advanced
+        if not self._SearchHelper__query["advanced"]:
+            warnings.warn('This query will be run in advanced mode.', RuntimeWarning)
+            self._SearchHelper__query["advanced"] = True
 
         # Inform the user if they set an invalid value for the query size
         if scroll_size <= 0:
             raise AttributeError('Scroll size must greater than zero')
 
         # Get the total number of records
-        total = Query(self.__search_client, q,
-                      advanced=True).search(index, limit=0, info=True)[1]["total_query_matches"]
+        total = self.search(limit=0, info=True, reset_query=False)[1]["total_query_matches"]
 
         # If aggregate is unnecessary, use Search automatically instead
         if total <= SEARCH_LIMIT:
-            return Query(self.__search_client, q, advanced=True).search(index)
+            return self.search(limit=SEARCH_LIMIT, reset_query=False)
 
         # Scroll until all results are found
         output = []
@@ -58,10 +73,11 @@ class AggregateMixin:
             #   scroll width is much smaller than that maximum
             scroll_width = scroll_size
             while True:
-                query = "(" + q + ') AND (mdf.scroll_id:>=%d AND mdf.scroll_id:<%d)' % (
-                                        scroll_pos, scroll_pos+scroll_width)
-                results, info = Query(self.__search_client, query,
-                                      advanced=True).search(index, info=True, limit=scroll_size)
+                query = "({q}) AND ({field}:>={start} AND {field}:<{end})".format(
+                        q=self._SearchHelper__query["q"], field=scroll_field, start=scroll_pos,
+                        end=scroll_pos+scroll_width)
+
+                results, info = self.search(q=query, advanced=True, info=True)
 
                 # Check to make sure that all the matching records were returned
                 if info["total_query_matches"] <= len(results):
@@ -80,7 +96,7 @@ class AggregateMixin:
 
         return output
 
-    def aggregate(self, q=None, index=None, scroll_size=SEARCH_LIMIT, reset_query=True):
+    def aggregate(self, q=None, scroll_size=SEARCH_LIMIT, reset_query=True, **kwargs):
         """Perform an advanced query, and return *all* matching results.
         Will automatically perform multiple queries in order to retrieve all results.
 
@@ -90,7 +106,6 @@ class AggregateMixin:
         Arguments:
             q (str): The query to execute. **Default:** The current helper-formed query, if any.
                     There must be some query to execute.
-            index (str): The Search index to search on. **Default:** The current index.
             scroll_size (int): Maximum number of records returned per query. Must be
                     between one and the ``SEARCH_LIMIT`` (inclusive).
                     **Default:** ``SEARCH_LIMIT``.
@@ -99,19 +114,27 @@ class AggregateMixin:
                     If ``False``, will keep the current query set.
                     **Default:** ``True``.
 
+        Keyword Arguments:
+            scroll_field (str): The field on which to scroll. This should be a field
+                    that counts/indexes the entries.
+                    This should be set in ``self.scroll_field``, but if your application
+                    requires separate scroll fields for a single client,
+                    it can be set in this way as well.
+                    **Default**: ``self.scroll_field``.
+
         Returns:
             list of dict: All matching records.
         """
+        scroll_field = kwargs.get("scroll_field", self.scroll_field)
 
-        # Get the desired index
-        if not index:
-            index = self.index
-
+        # If q not specified, use internal, helper-built query
         if q is None:
-            res = self.__query.aggregate(index=index, scroll_size=scroll_size)
+            res = self._aggregate(scroll_field=scroll_field, scroll_size=scroll_size)
             if reset_query:
                 self.reset_query()
             return res
+        # Otherwise, run an independent query as SearchHelper.search() does.
         else:
-            return Query(self.__search_client, q=q,
-                         advanced=True).aggregate(self.index, scroll_size=scroll_size)
+            return self.__class__(index=self.index, q=q, advanced=True,
+                                  search_client=self._SearchHelper__search_client
+                                  ).aggregate(scroll_size=scroll_size, reset_query=reset_query)
