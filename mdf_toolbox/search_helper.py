@@ -63,6 +63,7 @@ def _clean_query_string(q):
 def _validate_query(query):
     """Validate and clean up a query to be sent to Search.
     Cleans the query string, removes unneeded parameters, and validates for correctness.
+    Does not modify the original argument.
     Raises an Exception on invalid input.
 
     Arguments:
@@ -71,6 +72,7 @@ def _validate_query(query):
     Returns:
         dict: The validated query.
     """
+    query = deepcopy(query)
     # q is always required
     if query["q"] == BLANK_QUERY["q"]:
         raise ValueError("No query specified.")
@@ -91,6 +93,10 @@ def _validate_query(query):
         # Default for get is NaN so comparison is always False
         if query.get(key, float('nan')) == val:
             query.pop(key)
+
+    # Remove unsupported fields
+    to_remove = [field for field in query.keys() if field not in BLANK_QUERY.keys()]
+    [query.pop(field) for field in to_remove]
 
     return query
 

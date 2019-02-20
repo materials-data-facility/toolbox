@@ -1,10 +1,12 @@
+from copy import deepcopy
 import re
 
 from globus_sdk import SearchAPIError
 import pytest
 
 import mdf_toolbox
-from mdf_toolbox.search_helper import SearchHelper
+from mdf_toolbox.search_helper import (SearchHelper, _validate_query,
+                                       BLANK_QUERY, SEARCH_LIMIT)
 
 
 # Manually logging in for SearchHelper testing
@@ -21,14 +23,44 @@ INDEX = "mdf"
 # * Static functions
 # ***********************************************
 
-def test_clean_query_string():
-    #TODO
-    pass
-
+# _clean_query_string() effectively tested in test_clean_query()
 
 def test_validate_query():
-    #TODO
-    pass
+    # Error on no query
+    with pytest.raises(ValueError):
+        _validate_query(deepcopy(BLANK_QUERY))
+
+    # If all fields set correctly, no changes
+    query1 = deepcopy(BLANK_QUERY)
+    query1["q"] = "(mdf.source_name:oqmd)"
+    query1["advanced"] = True
+    query1["limit"] = 1234
+    query1["offset"] = 5
+    query1["facets"] = "GFacet document"
+    query1["filters"] = "GFilter document"
+    query1["sort"] = "GSort document"
+    res1 = _validate_query(query1)
+    assert query1 == res1
+    assert query1 is not res1
+
+    query2 = deepcopy(BLANK_QUERY)
+    # q and limit get corrected
+    query2["q"] = "(mdf.source_name:oqmd("
+    query2["limit"] = 20000
+    # None for offset is invalid normally, but should not be removed
+    # because it is not the default value - the user has set it
+    query2["offset"] = None
+    # No errors on missing data
+    query2.pop("filters")
+    # Unsupported fields get removed
+    query2["badfield"] = "yes"
+    res2 = _validate_query(query2)
+    # Default values get removed
+    assert res2 == {
+        "q": "(mdf.source_name:oqmd)",
+        "limit": SEARCH_LIMIT,
+        "offset": None
+    }
 
 
 # ***********************************************
@@ -183,35 +215,6 @@ def test_ex_search():
                      q="data")._ex_search(info=True, limit=1)
 
 
-def test_aggregate_internal(capsys):
-    #TODO
-    pass
-    '''
-    q = SearchHelper(INDEX, search_client=SEARCH_CLIENT, advanced=True)
-    # Error on no query
-    with pytest.raises(ValueError) as excinfo:
-        q.aggregate("mdf")
-    assert "Query not set" in str(excinfo.value)
-
-    # Basic aggregation
-    q._SearchHelper__query["q"] = "mdf.source_name:nist_xps_db"
-    res1 = q.aggregate("mdf")
-    assert len(res1) > 10000
-    assert isinstance(res1[0], dict)
-
-    # Multi-dataset aggregation
-    q._SearchHelper__query["q"] = "(mdf.source_name:nist_xps_db OR mdf.source_name:khazana_vasp)"
-    res2 = q.aggregate(index="mdf")
-    assert len(res2) > 10000
-    assert len(res2) > len(res1)
-
-    # Unnecessary aggregation fallback to .search()
-    # Check success in Coveralls
-    q._SearchHelper__query["q"] = "mdf.source_name:khazana_vasp"
-    assert len(q.aggregate("mdf")) < 10000
-    '''
-
-
 def test_chaining():
     # Internal
     q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
@@ -236,6 +239,7 @@ def test_chaining():
 
 
 def test_clean_query():
+    # Effectively also tests _clean_query_string()
     # Imbalanced/improper parentheses
     q1 = SearchHelper(INDEX, search_client=SEARCH_CLIENT, q="() term ")
     assert q1._clean_query() == "term"
@@ -482,24 +486,6 @@ def test_search(capsys):
             mdf_toolbox.translate_index(INDEX))
 
 
-def test_aggregate_external():
-    #TODO
-    pass
-    '''
-    # Test that aggregate uses the current query properly
-    # And returns results
-    # And respects the reset_query arg
-    f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
-    f.match_field("mdf.source_name", "nist_xps_db")
-    res1 = f.aggregate(reset_query=False, index="mdf")
-    assert len(res1) > 10000
-    assert check_field(res1, "mdf.source_name", "nist_xps_db") == 0
-    res2 = f.aggregate()
-    assert len(res2) == len(res1)
-    assert check_field(res2, "mdf.source_name", "nist_xps_db") == 0
-    '''
-
-
 def test_reset_query():
     f = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
     # Term will return results
@@ -535,5 +521,4 @@ def test_anonymous(capsys):
                         advanced=True, limit=300)) == 300
 
     # Test aggregation
-    #TODO: Reenable
-    #assert len(f.aggregate("mdf.source_name:nist_xps_db")) > 10000
+    assert len(f.aggregate("mdf.source_name:nist_xps_db")) > 10000

@@ -1,12 +1,22 @@
-    def _aggregate(self, index, scroll_size=SEARCH_LIMIT):
+from mdf_toolbox.search_helper import SEARCH_LIMIT, _validate_query
+
+
+class AggregateMixin:
+    """Mixin to add the ``aggregate()`` functionality to the SearchHelper.
+
+    ``aggregate()`` is currently the only way to retrieve more than 10,000 entries
+    from Globus Search, and requires a ``scroll_field`` index field.
+    """
+
+    def _aggregate(self, scroll_field, scroll_size=SEARCH_LIMIT):
         """Perform an advanced query, and return *all* matching results.
         Will automatically perform multiple queries in order to retrieve all results.
 
-        Note: All ``aggregate`` queries run in advanced mode, and the state of Query will
-        be changed to advanced if not already defined
+        Note: All ``aggregate`` queries run in advanced mode.
 
         Arguments:
-            index (str): Name of the index to query
+            scroll_field (str): The field on which to scroll. This should be a field
+                    that counts/indexes the entries.
             scroll_size (int): Maximum number of records returned per query. Must be
                     between one and the ``SEARCH_LIMIT`` (inclusive).
                     **Default:** ``SEARCH_LIMIT``.
@@ -14,10 +24,9 @@
         Returns:
             list of dict: All matching entries.
         """
-
         # Warn the user we are changing the setting of advanced
-        if not self.advanced:
-            warnings.warn('Changing the setting of this query to advanced', RuntimeWarning)
+        if not self.__query["advanced"]:
+            warnings.warn('This query will be run in advanced mode.', RuntimeWarning)
 
         # Make sure the query has been set
         q = self.clean_query()
