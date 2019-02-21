@@ -2,8 +2,6 @@ import pytest
 import re
 
 import mdf_toolbox
-from mdf_toolbox.search_helper import SearchHelper
-from mdf_toolbox.mixins import AggregateMixin
 
 
 SEARCH_CLIENT = mdf_toolbox.login(credentials={"app_name": "MDF_Forge",
@@ -12,7 +10,7 @@ INDEX = "mdf"
 SCROLL_FIELD = "mdf.scroll_id"
 
 
-class DummyClient(AggregateMixin, SearchHelper):
+class DummyClient(mdf_toolbox.AggregateHelper, mdf_toolbox.SearchHelper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, scroll_field=SCROLL_FIELD, **kwargs)
 

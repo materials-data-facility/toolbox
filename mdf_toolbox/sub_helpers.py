@@ -3,15 +3,15 @@ import warnings
 from mdf_toolbox.search_helper import SearchHelper, SEARCH_LIMIT
 
 
-class AggregateMixin(SearchHelper):
-    """Mixin to add the ``aggregate()`` functionality to the SearchHelper.
+class AggregateHelper(SearchHelper):
+    """Subclass to add the ``aggregate()`` functionality to the SearchHelper.
 
     ``aggregate()`` is currently the only way to retrieve more than 10,000 entries
     from Globus Search, and requires a ``scroll_field`` index field.
     """
 
     def __init__(self, *args, **kwargs):
-        """Add the AggregateMixin to a SearchHelper.
+        """Add the AggregateHelper to a SearchHelper.
 
         Arguments:
             scroll_field (str): The field on which to scroll. This should be a field
