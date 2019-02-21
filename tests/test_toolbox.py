@@ -106,6 +106,25 @@ def test_anonymous_login(capsys):
     assert "Error: No known client for 'invalid' service." in out
 
 
+def test_logout():
+    # Credentials should exist
+    assert os.path.exists(os.path.join(mdf_toolbox.DEFAULT_CRED_PATH,
+                                       credentials["app_name"]+"_tokens.json"))
+    # Copy credentials out
+    shutil.copytree(mdf_toolbox.DEFAULT_CRED_PATH, "temp_tokens")
+
+    try:
+        mdf_toolbox.logout()
+        assert not os.path.exists(os.path.join(mdf_toolbox.DEFAULT_CRED_PATH,
+                                               credentials["app_name"]+"_tokens.json"))
+    # Always reset credentials
+    finally:
+        # Must delete token dir so copytree will copy correctly
+        shutil.rmtree(mdf_toolbox.DEFAULT_CRED_PATH)
+        shutil.copytree("temp_tokens", mdf_toolbox.DEFAULT_CRED_PATH)
+        shutil.rmtree("temp_tokens")
+
+
 def test_uncompress_tree():
     root = os.path.join(os.path.dirname(__file__), "testing_files")
     # Basic test, should extract tar and nested tar, but not delete anything

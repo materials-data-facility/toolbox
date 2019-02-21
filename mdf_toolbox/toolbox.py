@@ -1,6 +1,7 @@
 from collections.abc import Container, Iterable, Mapping
 from copy import deepcopy
 from datetime import datetime
+import errno
 import json
 import os
 import shutil
@@ -387,6 +388,27 @@ def anonymous_login(services):
                   "Anonymous access may not be allowed.".format(serv))
 
     return clients
+
+
+def logout(token_dir=DEFAULT_CRED_PATH):
+    """Remove ALL tokens in the token directory.
+    This will force re-authentication to all services using a Toolbox login() function.
+
+    Arguments:
+        token_dir (str): The path to the directory to save tokens in and look for
+                credentials by default. If this argument was given to a login() function,
+                the same value must be given here to properly logout.
+                Default DEFAULT_CRED_PATH.
+    """
+    for f in os.listdir(token_dir):
+        if f.endswith("tokens.json"):
+            try:
+                os.remove(os.path.join(token_dir, f))
+            except OSError as e:
+                # Eat ENOENT (no such file/dir, tokens already deleted) only,
+                # raise any other issue (bad permissions, etc.)
+                if e.errno != errno.ENOENT:
+                    raise
 
 
 # *************************************************
