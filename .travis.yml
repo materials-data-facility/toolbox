@@ -20,6 +20,7 @@ before_install:
 - mv MDF_Forge_tokens.json ~/.mdf/credentials/MDF_Forge_tokens.json
 - mv MDF_Connect_Client_tokens.json ~/.mdf/credentials/MDF_Connect_Client_tokens.json
 - mv client_credentials.json ~/.mdf/credentials/client_credentials.json
+- cp ~/.mdf/credentials/MDF_Forge_tokens.json ~/.mdf/credentials/SearchHelper_Client_tokens.json
 after_success:
 - coveralls
 notifications:
