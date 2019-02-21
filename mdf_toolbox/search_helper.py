@@ -15,6 +15,12 @@ NONADVANCED_LIMIT = 10
 # List of allowed operators
 OP_LIST = ["AND", "OR", "NOT"]
 
+# List of characters that should trigger automatic quotation marks
+QUOTE_LIST = [" ", "\t", "\n", "'"]
+# List of characters that should disable automatic quotation marks
+# ex. range queries
+UNQUOTE_LIST = ["[", "]", "{", "}"]
+
 # Initial blank query
 BLANK_QUERY = {
     "q": "(",
@@ -216,11 +222,19 @@ class SearchHelper:
         # Fields and values must be strings for Elasticsearch
         field = str(field)
         value = str(value)
+
+        # Check if quotes required and allowed, and quotes not present
+        # If the user adds improper double-quotes, this will not fix them
+        if (any([char in value for char in QUOTE_LIST]) and '"' not in value
+                and not any([char in value for char in UNQUOTE_LIST])):
+            value = '"' + value + '"'
+
         # Cannot add field:value if one is blank
         if field and value:
             self.__query["q"] += field + ":" + value
             # Field matches are advanced queries
             self.__query["advanced"] = True
+
         return self
 
     def _operator(self, op, close_group=False):

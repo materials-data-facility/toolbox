@@ -77,6 +77,11 @@ def test_init():
     assert q2._SearchHelper__query["advanced"] is True
     assert q2.initialized is True
 
+    # Test without explicit SearchClient
+    q3 = SearchHelper(INDEX)
+    assert q3._SearchHelper__query["advanced"] is False
+    assert q3.initialized is False
+
 
 def test_term():
     q = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
@@ -121,6 +126,22 @@ def test_field():
     assert q2._SearchHelper__query["q"] == "("
     q2._field(field="field", value="value")
     assert q2._SearchHelper__query["q"] == "(field:value"
+
+    # Test auto-quote
+    q3 = SearchHelper(INDEX, search_client=SEARCH_CLIENT)
+    q3._field("dc.descriptions.description", "With Spaces")
+    assert q3._SearchHelper__query["q"] == '(dc.descriptions.description:"With Spaces"'
+    q3._and_join(close_group=True)._field("dc.title", "Mark's")
+    assert q3._SearchHelper__query["q"] == ('(dc.descriptions.description:"With Spaces") AND ('
+                                            'dc.title:"Mark\'s"')
+    q3._or_join(close_group=False)._field("dc.title", "The\nLarch")
+    assert q3._SearchHelper__query["q"] == ('(dc.descriptions.description:"With Spaces") AND ('
+                                            'dc.title:"Mark\'s" OR dc.title:"The\nLarch"')
+    # No auto-quote on ranges
+    q3._and_join(close_group=True)._field("block.range", "[5 TO 6]")
+    assert q3._SearchHelper__query["q"] == ('(dc.descriptions.description:"With Spaces") AND ('
+                                            'dc.title:"Mark\'s" OR dc.title:"The\nLarch") AND ('
+                                            'block.range:[5 TO 6]')
 
 
 def test_operator():
