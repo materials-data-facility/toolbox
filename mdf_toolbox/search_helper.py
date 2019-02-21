@@ -178,6 +178,10 @@ class SearchHelper:
         """Whether any valid term has been added to the query."""
         return bool(self._clean_query())
 
+    def logout(self):
+        """Delete Globus Auth tokens."""
+        mdf_toolbox.logout()
+
     # ************************************************************************************
     # * Internal functions
     # ************************************************************************************
