@@ -14,7 +14,7 @@ SCROLL_FIELD = "mdf.scroll_id"
 
 class DummyClient(AggregateMixin, SearchHelper):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs, scroll_field=SCROLL_FIELD)
+        super().__init__(*args, scroll_field=SCROLL_FIELD, **kwargs)
 
 
 # Helper

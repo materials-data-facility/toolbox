@@ -1,9 +1,9 @@
 import warnings
 
-from mdf_toolbox.search_helper import SEARCH_LIMIT
+from mdf_toolbox.search_helper import SearchHelper, SEARCH_LIMIT
 
 
-class AggregateMixin:
+class AggregateMixin(SearchHelper):
     """Mixin to add the ``aggregate()`` functionality to the SearchHelper.
 
     ``aggregate()`` is currently the only way to retrieve more than 10,000 entries
