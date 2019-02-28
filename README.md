@@ -21,7 +21,7 @@ pip install -e .
 ```
 
 # Documentation and examples
-Tutorials can be found in the `docs` directory. The Jupyter notebooks can be viewed on GitHub or run interactively with ![Jupyter](http://jupyter.org/install).
+Tutorials can be found in the `docs` directory. The Jupyter notebooks can be viewed on GitHub or run interactively with [Jupyter](http://jupyter.org/install).
 
 # Requirements
 * Toolbox requires Python 3.5 or greater.

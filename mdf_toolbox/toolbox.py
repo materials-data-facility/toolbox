@@ -64,34 +64,35 @@ DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
 
 def login(credentials=None, app_name=None, services=None, client_id=None, make_clients=True,
           clear_old_tokens=False, token_dir=DEFAULT_CRED_PATH, **kwargs):
-    """Login to Globus services
+    """Log in to Globus services
 
     Arguments:
-    credentials (str or dict): A string filename, string JSON, or dictionary
-                                   with credential and config information.
-                               By default, looks in ~/mdf/credentials/globus_login.json.
-                               Contains app_name, services, and client_id as described below.
-    app_name (str): Name of script/client. This will form the name of the token cache file.
-                    Default 'UNKNOWN'.
-    services (list of str): Services to authenticate with.
-                            Services are listed in AUTH_SCOPES.
-                            Default [].
-    client_id (str): The ID of the client, given when registered with Globus.
-                     Default is the MDF Native Clients ID.
-    make_clients (bool): If True, will make and return appropriate clients with generated tokens.
-                         If False, will only return authorizers.
-                         Default True.
-    clear_old_tokens (bool): If True, delete old token file if it exists, forcing user to re-login.
-                             If False, use existing token file if there is one.
-                             Default False.
-    token_dir (str): The path to the directory to save tokens in and look for
-                     credentials by default. Default DEFAULT_CRED_PATH.
+        credentials (str or dict): A string filename, string JSON, or dictionary
+                with credential and config information.
+                By default, looks in ``~/mdf/credentials/globus_login.json``.
+                Contains ``app_name``, ``services``, and ``client_id`` as described below.
+        app_name (str): Name of script/client. This will form the name of the token cache file.
+                **Default**: ``'UNKNOWN'``.
+        services (list of str): Services to authenticate with.
+                **Default**: ``[]``.
+        client_id (str): The ID of the client, given when registered with Globus.
+                **Default**: The MDF Native Clients ID.
+        make_clients (bool): If ``True``, will make and return appropriate clients with
+                generated tokens. If ``False``, will only return authorizers.
+                **Default**: ``True``.
+        clear_old_tokens (bool): If ``True``, delete old token file if it exists,
+                forcing user to re-login. If ``False``, use existing token file if there is one.
+                **Default**: ``False``.
+        token_dir (str): The path to the directory to save tokens in and look for
+                credentials by default. **Default**: ``DEFAULT_CRED_PATH``.
 
     Returns:
-    dict: The clients and authorizers requested, indexed by service name.
-          For example, if login() is told to auth with 'search'
-            then the search client will be in the 'search' field.
-          Note: Previously requested tokens (which are cached) will be returned alongside
+        dict: The clients and authorizers requested, indexed by service name.
+                For example, if ``login()`` is told to auth with ``'search'``
+                then the search client will be in the ``'search'`` field.
+
+        Note:
+            Previously requested tokens (which are cached) will be returned alongside
             explicitly requested ones.
     """
     NATIVE_CLIENT_ID = "98bfc684-977f-4670-8669-71f8337688e4"
@@ -255,27 +256,27 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
 
 def confidential_login(credentials=None, client_id=None, client_secret=None, services=None,
                        make_clients=True, token_dir=DEFAULT_CRED_PATH):
-    """Login to Globus services as a confidential client (a client with its own login information).
+    """Log in to Globus services as a confidential client
+    (a client with its own login information).
 
     Arguments:
-    credentials (str or dict): A string filename, string JSON, or dictionary
-                                   with credential and config information.
-                               By default, uses the DEFAULT_CRED_FILENAME and token_dir.
-        Contains client_id, client_secret, and services as defined below.
-    client_id (str): The ID of the client.
-    client_secret (str): The client's secret for authentication.
-    services (list of str): Services to authenticate with.
-                            Services are listed in AUTH_SCOPES.
-    make_clients (bool): If True, will make and return appropriate clients with generated tokens.
-                         If False, will only return authorizers.
-                         Default True.
-    token_dir (str): The path to the directory to save tokens in and look for
-                     credentials by default. Default DEFAULT_CRED_PATH.
+        credentials (str or dict): A string filename, string JSON, or dictionary
+                with credential and config information.
+                By default, uses the ``DEFAULT_CRED_FILENAME`` and token_dir.
+                Contains ``client_id``, ``client_secret``, and ``services`` as defined below.
+        client_id (str): The ID of the client.
+        client_secret (str): The client's secret for authentication.
+        services (list of str): Services to authenticate with.
+        make_clients (bool): If ``True``, will make and return appropriate clients
+                with generated tokens.
+                If ``False``, will only return authorizers.
+                **Default**: ``True``.
+        token_dir (str): The path to the directory to save tokens in and look for
+                credentials by default.
+                **Default**: ``DEFAULT_CRED_PATH``.
 
     Returns:
-    dict: The clients and authorizers requested, indexed by service name.
-          For example, if confidential_login() is told to auth with 'search'
-            then the search client will be in the 'search' field.
+        dict: The clients and authorizers requested, indexed by service name.
     """
     DEFAULT_CRED_FILENAME = "confidential_globus_login.json"
     # Read credentials if supplied
@@ -363,15 +364,14 @@ def confidential_login(credentials=None, client_id=None, client_secret=None, ser
 def anonymous_login(services):
     """Initialize services without authenticating to Globus Auth.
 
+    Note:
+        Clients may have reduced functionality without authentication.
+
     Arguments:
-    services (str or list of str): The services to initialize clients for.
-                                   Note that clients may have reduced functionality
-                                   without authentication.
+        services (str or list of str): The services to initialize clients for.
 
     Returns:
-    dict: The clients requested, indexed by service name.
-          For example, if anonymous_login() is told to auth with 'search'
-            then the search client will be in the 'search' field.
+        dict: The clients requested, indexed by service name.
     """
     if isinstance(services, str):
         services = [services]
@@ -392,13 +392,13 @@ def anonymous_login(services):
 
 def logout(token_dir=DEFAULT_CRED_PATH):
     """Remove ALL tokens in the token directory.
-    This will force re-authentication to all services using a Toolbox login() function.
+    This will force re-authentication to all services.
 
     Arguments:
         token_dir (str): The path to the directory to save tokens in and look for
-                credentials by default. If this argument was given to a login() function,
+                credentials by default. If this argument was given to a ``login()`` function,
                 the same value must be given here to properly logout.
-                Default DEFAULT_CRED_PATH.
+                **Default**: ``DEFAULT_CRED_PATH``.
     """
     for f in os.listdir(token_dir):
         if f.endswith("tokens.json"):
@@ -421,15 +421,17 @@ def uncompress_tree(root, delete_archives=False):
     This process can be slow, depending on the number and size of archives.
 
     Arguments:
-    root (str): The path to the starting (root) directory.
-    delete_archives (bool): If True, will delete extracted archive files.
-                            If False, will preserve archive files.
-                            Default False.
+        root (str): The path to the starting (root) directory.
+        delete_archives (bool): If ``True``, will delete extracted archive files.
+                                If ``False``, will preserve archive files.
+                                **Default**: ``False``.
+
     Returns:
-    dict: Results.
-        success (bool): If the extraction succeeded.
-        num_extracted (int): Number of archives extracted.
-        files_errored (list of str): The files that threw an unexpected exception when extracted.
+        dict: Results of the operation.
+            * **success** (*bool*) - If the extraction succeeded.
+            * **num_extracted** (*int*) - Number of archives extracted.
+            * **files_errored** (*list of str*) - The files that threw an unexpected
+                exception when extracted.
     """
     num_extracted = 0
     error_files = []
@@ -468,10 +470,11 @@ def uncompress_tree(root, delete_archives=False):
 
 def format_gmeta(data, acl=None, identifier=None):
     """Format input into GMeta format, suitable for ingesting into Globus Search.
-    Format a dictionary into a GMetaEntry.
-    Format a list of GMetaEntry into a GMetaList inside a GMetaIngest.
+    Formats a dictionary into a GMetaEntry.
+    Formats a list of GMetaEntry into a GMetaList inside a GMetaIngest.
 
-    Example usage:
+    **Example usage**::
+
         glist = []
         for document in all_my_documents:
             gmeta_entry = format_gmeta(document, ["public"], document["id"])
@@ -479,19 +482,19 @@ def format_gmeta(data, acl=None, identifier=None):
         ingest_ready_document = format_gmeta(glist)
 
     Arguments:
-    data (dict or list): The data to be formatted.
-        If data is a dict, arguments acl and id1 are required.
-        If data is a list, it must consist of GMetaEntry documents.
-    acl (list of str): The list of Globus UUIDs allowed to view the document,
-                       or the special value ["public"] to allow anyone access.
-                       Required if data is a dict. Ignored if data is a list.
-    identifier (str): A unique identifier for this document. If this value is not unique,
-                      ingests into Globus Search may merge entries.
-                      Required is data is a dict. Ignored if data is a list.
+        data (dict or list): The data to be formatted.
+                If data is a dict, arguments ``acl`` and ``identifier`` are required.
+                If data is a list, it must consist of GMetaEntry documents.
+        acl (list of str): The list of Globus UUIDs allowed to view the document,
+                or the special value ``["public"]`` to allow anyone access.
+                Required if data is a dict. Ignored if data is a list.
+        identifier (str): A unique identifier for this document. If this value is not unique,
+                ingests into Globus Search may merge entries.
+                Required is data is a dict. Ignored if data is a list.
 
     Returns:
-    dict (if data is dict): The data as a GMetaEntry.
-    dict (if data is list): The data as a GMetaIngest.
+        dict (if ``data`` is ``dict``): The data as a GMetaEntry.
+        dict (if ``data`` is ``list``): The data as a GMetaIngest.
     """
     if isinstance(data, dict):
         if acl is None or identifier is None:
@@ -525,18 +528,18 @@ def format_gmeta(data, acl=None, identifier=None):
 def gmeta_pop(gmeta, info=False):
     """Remove GMeta wrapping from a Globus Search result.
     This function can be called on the raw GlobusHTTPResponse that Search returns,
-        or a string or dictionary representation of it.
+    or a string or dictionary representation of it.
 
     Arguments:
-    gmeta (dict, str, or GlobusHTTPResponse): The Globus Search result to unwrap.
-    info (bool): If False, gmeta_pop will return a list of the results and discard the metadata.
-                 If True, gmeta_pop will return a tuple containing the results list,
-                    and other information about the query.
-                 Default False.
+        gmeta (dict, str, or GlobusHTTPResponse): The Globus Search result to unwrap.
+        info (bool): If ``False``, will return a list of the results
+                and discard the metadata. If ``True``, will return a tuple containing
+                the results list, and other information about the query.
+                **Default**: ``False``.
 
     Returns:
-    list (if info=False): The unwrapped results.
-    tuple (if info=True): The unwrapped results, and a dictionary of query information.
+        list (if ``info=False``): The unwrapped results.
+        tuple (if ``info=True``): The unwrapped results, and a dictionary of query information.
     """
     if type(gmeta) is GlobusHTTPResponse:
         gmeta = json.loads(gmeta.text)
@@ -550,7 +553,7 @@ def gmeta_pop(gmeta, info=False):
             results.append(con)
     if info:
         fyi = {
-            "total_query_matches": gmeta["total"]
+            "total_query_matches": gmeta.get("total")
             }
         return results, fyi
     else:
@@ -560,14 +563,14 @@ def gmeta_pop(gmeta, info=False):
 def translate_index(index_name):
     """Translate a known Globus Search index into the index UUID.
     The UUID is the proper way to access indices, and will eventually be the only way.
-    This method will not change names it cannot disambiguate.
+    This method will return names it cannot disambiguate.
 
     Arguments:
-    index_name (str): The name of the index.
+        index_name (str): The name of the index.
 
     Returns:
-    str: The UUID of the index. If the index is not known and is not unambiguous,
-            this will be the index_name unchanged.
+        str: The UUID of the index. If the index is not known and is not unambiguous,
+                this will be the ``index_name`` unchanged instead.
     """
     uuid = SEARCH_INDEX_UUIDS.get(index_name.strip().lower())
     if not uuid:
@@ -585,35 +588,37 @@ def translate_index(index_name):
 # * Globus Transfer utilities
 # *************************************************
 
-def custom_transfer(transfer_client, source_ep, dest_ep, path_list,
-                    interval=DEFAULT_INTERVAL, inactivity_time=DEFAULT_INACTIVITY_TIME,
-                    notify=True):
+def custom_transfer(transfer_client, source_ep, dest_ep, path_list, interval=DEFAULT_INTERVAL,
+                    inactivity_time=DEFAULT_INACTIVITY_TIME, notify=True):
     """Perform a Globus Transfer.
 
     Arguments:
-    transfer_client (TransferClient): An authenticated Transfer client.
-    source_ep (str): The source Globus Endpoint ID.
-    dest_ep (str): The destination Globus Endpoint ID.
-    path_list (list of tuple of 2 str): A list of tuples containing the paths to transfer as
-                                        (source, destination).
-        Example: [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
-                  ("/source/all_reports/", "/dest/reports/")]
-    interval (int): Number of seconds to wait before polling Transfer status.
-                    Default DEFAULT_INTERVAL. Minimum 1.
-    inactivity_time (int): Number of seconds a Transfer is allowed to go without progress
-                           before being cancelled. Default DEFAULT_INACTIVITY_TIME.
-    notify (bool): When True, trigger a notification email from Globus to the user when
-                   the Transfer succeeds or fails.
-                   When False, disbale the notification.
-                   Default True.
+        transfer_client (TransferClient): An authenticated Transfer client.
+        source_ep (str): The source Globus Endpoint ID.
+        dest_ep (str): The destination Globus Endpoint ID.
+        path_list (list of tuple of 2 str): A list of tuples containing the paths to transfer as
+                ``(source, destination)``.
+
+                **Example**::
+
+                    [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
+                     ("/source/all_reports/", "/dest/reports/")]
+
+        interval (int): Number of seconds to wait before polling Transfer status.
+                Minimum ``1``. **Default**: ``DEFAULT_INTERVAL``.
+        inactivity_time (int): Number of seconds a Transfer is allowed to go without progress
+                before being cancelled. **Default**: ``DEFAULT_INACTIVITY_TIME``.
+        notify (bool): When ``True``, trigger a notification email from Globus to the user when
+                the Transfer succeeds or fails. When ``False``, disable the notification.
+                **Default**: ``True``.
 
     Yields:
-    dict: An error from the transfer, or (last) a success status
+        dict: An error from the transfer, or (last) a success status.
 
-    Accepts via .send():
-    bool: True: Continue the Transfer
-          False: Cancel the Transfer
-          Default True
+    Accepts via ``.send()``:
+        *bool*: ``True``: Continue the Transfer
+                ``False``: Cancel the Transfer
+                **Default**: ``True``
     """
     # TODO: (LW) Handle transfers with huge number of files
     # If a TransferData object is too large, Globus might timeout
@@ -788,30 +793,33 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None
     """Perform a Globus Transfer and monitor for success.
 
     Arguments:
-    transfer_client (TransferClient): An authenticated Transfer client.
-    source_ep (str): The source Globus Endpoint ID.
-    dest_ep (str): The destination Globus Endpoint ID.
-    path_list (list of tuple of 2 str): A list of tuples containing the paths to transfer as
-                                        (source, destination).
-        Example: [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
-                  ("/source/all_reports/", "/dest/reports/")]
-    interval (int): Number of seconds to wait before polling Transfer status.
-                    Default DEFAULT_INTERVAL. Minimum 1.
-    retries (int): The number of errors to tolerate before cancelling the task.
-                   Globus Transfer makes no distinction between
-                   hard errors (e.g. "permission denied")
-                   and soft errors (e.g. "endpoint [temporarily] too busy")
-                   so requiring retries is not uncommon for large Transfers.
-                   -1 for infinite tries (Transfer still fails after a period of no activity).
-                   None is synonymous with 0.
-                   Default 10.
-    notify (bool): When True, trigger a notification email from Globus to the user when
-                   the Transfer succeeds or fails.
-                   When False, disbale the notification.
-                   Default True.
+        transfer_client (TransferClient): An authenticated Transfer client.
+        source_ep (str): The source Globus Endpoint ID.
+        dest_ep (str): The destination Globus Endpoint ID.
+        path_list (list of tuple of 2 str): A list of tuples containing the paths to transfer as
+                ``(source, destination)``.
+
+                **Example**::
+
+                    [("/source/files/file.dat", "/dest/mydocs/doc.dat"),
+                     ("/source/all_reports/", "/dest/reports/")]
+
+        interval (int): Number of seconds to wait before polling Transfer status.
+                Minimum ``1``.**Default**: ``DEFAULT_INTERVAL``.
+        retries (int): The number of errors to tolerate before cancelling the task.
+                Globus Transfer makes no distinction between hard errors
+                (e.g. "permission denied") and soft errors
+                (e.g. "endpoint [temporarily] too busy") so requiring retries is
+                not uncommon for large Transfers.
+                ``-1`` for infinite tries (Transfer still fails after a period of no activity).
+                ``None`` is synonymous with ``0``.
+                **Default**: ``10``.
+        notify (bool): When ``True``, trigger a notification email from Globus to the user when
+                the Transfer succeeds or fails. When ``False``, disable the notification.
+                **Default**: ``True``.
 
     Returns:
-    str: ID of the Globus Transfer.
+        str: ID of the Globus Transfer.
     """
     if retries is None:
         retries = 0
@@ -845,12 +853,12 @@ def get_local_ep(transfer_client):
     """Discover the local Globus Connect Personal endpoint's ID, if possible.
 
     Arguments:
-    transfer_client (TransferClient): An authenticated Transfer client.
+        transfer_client (TransferClient): An authenticated Transfer client.
 
     Returns:
-    str: The local GCP EP ID if it was discovered.
-    If the ID is not discovered, an exception will be raised.
-        (globus_sdk.GlobusError unless the user cancels the search)
+        str: The local GCP EP ID if it was discovered.
+                If the ID is not discovered, an exception will be raised.
+                (``globus_sdk.GlobusError`` unless the user cancels the search)
     """
     pgr_res = transfer_client.endpoint_search(filter_scope="my-endpoints")
     ep_candidates = pgr_res.data
@@ -926,11 +934,11 @@ def dict_merge(base, addition):
     This function does not modify either dictionary.
 
     Arguments:
-    base (dict): The dictionary being added to.
-    addition (dict): The dictionary with additional data.
+        base (dict): The dictionary being added to.
+        addition (dict): The dictionary with additional data.
 
     Returns:
-    dict: The merged base.
+        dict: The merged base.
     """
     if not isinstance(base, dict) or not isinstance(addition, dict):
         raise TypeError("dict_merge only works with dicts.")
@@ -949,35 +957,35 @@ def dict_merge(base, addition):
 
 def insensitive_comparison(item1, item2, type_insensitive=False, string_insensitive=False):
     """Compare two items without regard to order.
-    Items that are not of the same type can be equivalent only when type_insensitive=True.
-    Mapping objects are equal iff the keys in each item exist in both items and have
-        the same value (with the same insensitive_comparison).
-    Other containers except for strings are equal iff every element in each item exists
-        in both items (duplicate items must be present the same number of times).
-        Containers must be Iterable to be compared in this way.
-    Non-containers are equivalent if the equality operator returns True.
-    Strings are treated as non-containers when string_insensitive=False,
-        and are treated as containers when string_insensitive=True. When treated as
-        containers, each (case-insensitive) character is treated as an element.
-    If the items are in different categories above, they are never equivalent,
-        even when type_insensitive=True.
+
+    The following rules are used to determine equivalence:
+        * Items that are not of the same type can be equivalent only when ``type_insensitive=True``.
+        * Mapping objects are equal iff the keys in each item exist in both items and have
+          the same value (with the same ``insensitive_comparison``).
+        * Other containers except for strings are equal iff every element in each item exists
+          in both items (duplicate items must be present the same number of times).
+        * Containers must be ``Iterable`` to be compared in this way.
+        * Non-containers are equivalent if the equality operator returns ``True``.
+        * Strings are treated as non-containers when ``string_insensitive=False``,
+          and are treated as containers when ``string_insensitive=True``. When treated as
+          containers, each (case-insensitive) character is treated as an element.
+        * If the items are in different categories above, they are never equivalent,
+          even when ``type_insensitive=True``.
 
     Arguments:
-    item1 (any): The first item to compare.
-    item2 (any): The second item to compare.
-    type_insensitive (bool): When True, items of a different type are not automatically
-                                unequivalent.
-                             When False, items must be the same type to be equivalent.
-                             Default False.
-    string_insensitive (bool): When True, strings are treated as containers, with each
-                                    character being one element in the container.
-                               When False, strings are treated as non-containers and compared
-                                    directly.
-                               Default False.
+        item1 (any): The first item to compare.
+        item2 (any): The second item to compare.
+        type_insensitive (bool): When ``True``, items of a different type are not automatically
+                unequivalent. When ``False``, items must be the same type to be equivalent.
+                **Default**: ``False``.
+        string_insensitive (bool): When ``True``, strings are treated as containers, with each
+                character being one element in the container.
+                When ``False``, strings are treated as non-containers and compared directly.
+                **Default**: ``False``.
 
     Returns:
-    bool: True iff the two items are equivalent (see above).
-          False otherwise.
+        bool: ``True`` iff the two items are equivalent (see above).
+                ``False`` otherwise.
     """
     # If type-sensitive, check types
     if not type_insensitive and type(item1) != type(item2):
@@ -1090,7 +1098,9 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
 # *************************************************
 
 class DataPublicationClient(BaseClient):
-    """Publish data with Globus Publish."""
+    """Publish data with Globus Publish.
+    Not intended for public use.
+    """
 
     def __init__(self, base_url="https://publish.globus.org/v1/api/", **kwargs):
         app_name = kwargs.pop('app_name', 'DataPublication Client v0.1')
