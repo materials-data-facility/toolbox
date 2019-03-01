@@ -1,5 +1,5 @@
-Forge Tutorials
-===============
+Toolbox Tutorials
+=================
 
 .. toctree::
 

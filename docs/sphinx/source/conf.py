@@ -85,6 +85,10 @@ exclude_patterns = ['_build', '**.ipynb_checkpoints']
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
 
+autodoc_default_options = {
+    "exclude-members": "DataPublicationClient"
+}
+
 # A list of modules to be mocked up. This is useful when some external dependencies are not met
 # at build time and break the building process.
 # You may only specify the root package of the dependencies themselves and ommit the sub-modules:
