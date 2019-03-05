@@ -8,6 +8,7 @@ Index
    :titlesonly:
 
    MDF Toolbox <mdf_toolbox>
+   SearchHelper <search_helper>
    Tutorials <tutorial_list>
 
 

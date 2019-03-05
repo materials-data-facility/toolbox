@@ -42,7 +42,7 @@ KNOWN_CLIENTS = {
     "transfer": globus_sdk.TransferClient,
     "search": globus_sdk.SearchClient,
     "search_ingest": globus_sdk.SearchClient,
-    #  "publish": DataPublicationClient,  # Defined in this module, added to dict later
+    #  "publish": _DataPublicationClient,  # Defined in this module, added to dict later
     "groups": NexusClient
 }
 SEARCH_INDEX_UUIDS = {
@@ -1097,10 +1097,7 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
 # * Clients
 # *************************************************
 
-class DataPublicationClient(BaseClient):
-    """Publish data with Globus Publish.
-    Not intended for public use.
-    """
+class _DataPublicationClient(BaseClient):
 
     def __init__(self, base_url="https://publish.globus.org/v1/api/", **kwargs):
         app_name = kwargs.pop('app_name', 'DataPublication Client v0.1')
@@ -1149,4 +1146,4 @@ class DataPublicationClient(BaseClient):
 
 
 # Add Toolbox clients to known clients
-KNOWN_CLIENTS["publish"] = DataPublicationClient
+KNOWN_CLIENTS["publish"] = _DataPublicationClient
