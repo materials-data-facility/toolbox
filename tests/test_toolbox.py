@@ -6,6 +6,7 @@ import shutil
 from globus_nexus_client import NexusClient
 import globus_sdk
 import mdf_toolbox
+from mdf_toolbox.toolbox import _DataPublicationClient
 import pytest
 
 credentials = {
@@ -33,7 +34,7 @@ def test_login(capsys, monkeypatch):
     assert isinstance(res2.get("data_mdf"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("connect"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
-    assert isinstance(res2.get("publish"), mdf_toolbox.DataPublicationClient)
+    assert isinstance(res2.get("publish"), _DataPublicationClient)
     assert isinstance(res2.get("groups"), NexusClient)
 
     # Test fetching previous tokens
@@ -74,7 +75,7 @@ def test_confidential_login(capsys):
     assert isinstance(mdf_toolbox.confidential_login(client_id=creds["client_id"],
                                                      client_secret=creds["client_secret"],
                                                      services=["publish"])["publish"],
-                      mdf_toolbox.DataPublicationClient)
+                      _DataPublicationClient)
     # No client available
     assert isinstance(mdf_toolbox.confidential_login(creds, services="petrel")["petrel"],
                       globus_sdk.ClientCredentialsAuthorizer)
@@ -92,7 +93,7 @@ def test_anonymous_login(capsys):
     res1 = mdf_toolbox.anonymous_login(["transfer", "search", "publish", "groups"])
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
     assert isinstance(res1.get("transfer"), globus_sdk.TransferClient)
-    assert isinstance(res1.get("publish"), mdf_toolbox.DataPublicationClient)
+    assert isinstance(res1.get("publish"), _DataPublicationClient)
     assert isinstance(res1.get("groups"), NexusClient)
 
     # Single service works
@@ -508,8 +509,3 @@ def test_insensitive_comparison():
     assert mdf_toolbox.insensitive_comparison(dbase, d6) is False
     assert mdf_toolbox.insensitive_comparison(dbase, d6, string_insensitive=True,
                                               type_insensitive=True) is False
-
-
-def test_DataPublicationClient():
-    # TODO
-    pass
