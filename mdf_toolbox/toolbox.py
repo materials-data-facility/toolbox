@@ -849,78 +849,20 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None
     }
 
 
-def get_local_ep(transfer_client):
-    """Discover the local Globus Connect Personal endpoint's ID, if possible.
-
-    Arguments:
-        transfer_client (TransferClient): An authenticated Transfer client.
-
-    Returns:
-        str: The local GCP EP ID if it was discovered.
-                If the ID is not discovered, an exception will be raised.
-                (``globus_sdk.GlobusError`` unless the user cancels the search)
+def get_local_ep(*args, **kwargs):
     """
-    pgr_res = transfer_client.endpoint_search(filter_scope="my-endpoints")
-    ep_candidates = pgr_res.data
-    # Check number of candidates
-    if len(ep_candidates) < 1:
-        # Nothing found
-        raise globus_sdk.GlobusError("Error: No local endpoints found")
-    elif len(ep_candidates) == 1:
-        # Exactly one candidate
-        if not ep_candidates[0]["gcp_connected"]:
-            # Is GCP, is not on
-            raise globus_sdk.GlobusError("Error: Globus Connect is not running")
-        else:
-            # Is GCServer or GCP and connected
-            return ep_candidates[0]["id"]
+    Warning:
+        DEPRECATED: Use ``globus_sdk.LocalGlobusConnectPersonal().endpoint_id`` instead.
+    """
+    if kwargs.get("warn", True):
+        raise DeprecationWarning("'get_local_ep()' has been deprecated in favor of "
+                                 "'globus_sdk.LocalGlobusConnectPersonal().endpoint_id'. "
+                                 "To override, pass in 'warn=False'.")
     else:
-        # >1 found
-        # Filter out disconnected GCP
-        ep_connections = [candidate for candidate in ep_candidates
-                          if candidate["gcp_connected"] is not False]
-        # Recheck list
-        if len(ep_connections) < 1:
-            # Nothing found
-            raise globus_sdk.GlobusError("Error: No local endpoints running")
-        elif len(ep_connections) == 1:
-            # Exactly one candidate
-            if not ep_connections[0]["gcp_connected"]:
-                # Is GCP, is not on
-                raise globus_sdk.GlobusError("Error: Globus Connect is not active")
-            else:
-                # Is GCServer or GCP and connected
-                return ep_connections[0]["id"]
-        else:
-            # Still >1 found
-            # Prompt user
-            print("Multiple endpoints found:")
-            count = 0
-            for ep in ep_connections:
-                count += 1
-                print(count, ": ", ep["display_name"], "\t", ep["id"])
-            print("\nPlease choose the endpoint on this machine")
-            ep_num = 0
-            while ep_num == 0:
-                usr_choice = input("Enter the number of the correct endpoint (-1 to cancel): ")
-                try:
-                    ep_choice = int(usr_choice)
-                    if ep_choice == -1:
-                        # User wants to quit
-                        ep_num = -1
-                    elif ep_choice in range(1, count+1):
-                        # Valid selection
-                        ep_num = ep_choice
-                    else:
-                        # Invalid number
-                        print("Invalid selection")
-                except Exception:
-                    print("Invalid input")
-
-            if ep_num == -1:
-                print("Cancelling")
-                raise SystemExit
-            return ep_connections[ep_num-1]["id"]
+        import warnings
+        warnings.warn("'get_local_ep()' has been deprecated in favor of "
+                      "'globus_sdk.LocalGlobusConnectPersonal().endpoint_id'.")
+    return globus_sdk.LocalGlobusConnectPersonal().endpoint_id
 
 
 # *************************************************

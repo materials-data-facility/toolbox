@@ -373,11 +373,6 @@ def test_quick_transfer():
     pass
 
 
-def test_get_local_ep():
-    # TODO
-    pass
-
-
 def test_dict_merge():
     base = {
         "base_key": "base",
