@@ -419,6 +419,15 @@ def test_dict_merge():
             }
         }
     }
+    b_list = {
+        "list_field": ["base"]
+    }
+    a_list = {
+        "list_field": ["add"]
+    }
+    m_list = {
+        "list_field": ["base", "add"]
+    }
     # Proper use
     old_base = deepcopy(base)
     old_add = deepcopy(add)
@@ -426,6 +435,12 @@ def test_dict_merge():
     # Originals should be unchanged
     assert base == old_base
     assert add == old_add
+
+    # Test list appending
+    # No appending
+    assert mdf_toolbox.dict_merge(b_list, a_list, append_lists=False) == b_list
+    # With appending
+    assert mdf_toolbox.dict_merge(b_list, a_list, append_lists=True) == m_list
 
     assert mdf_toolbox.dict_merge({}, {}) == {}
 
@@ -460,7 +475,7 @@ def test_insensitive_comparison():
     }
     d2 = {
         "aaa": ["a", "zzz", 4, 5, "zzqq"],
-        "ccc": "aaaaBBBBCCCC",
+        "ccc": "aaaaBB BBCCC\tC\n",
         "bbb": 50.00000000000,
         "www": (1, 2, 9, 4, 5, "f")
     }
