@@ -896,7 +896,7 @@ def dict_merge(base, addition, append_lists=False):
         if isinstance(value, dict):
             new_base[key] = dict_merge(new_base.get(key, {}), value)
         elif append_lists and isinstance(value, list):
-            new_list = new_base.get(key, [])
+            new_list = deepcopy(new_base.get(key, []))
             [new_list.append(item) for item in value if item not in new_list]
             new_base[key] = new_list
         # Otherwise, if the key is not in base, add it
