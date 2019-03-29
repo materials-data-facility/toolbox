@@ -849,93 +849,40 @@ def quick_transfer(transfer_client, source_ep, dest_ep, path_list, interval=None
     }
 
 
-def get_local_ep(transfer_client):
-    """Discover the local Globus Connect Personal endpoint's ID, if possible.
-
-    Arguments:
-        transfer_client (TransferClient): An authenticated Transfer client.
-
-    Returns:
-        str: The local GCP EP ID if it was discovered.
-                If the ID is not discovered, an exception will be raised.
-                (``globus_sdk.GlobusError`` unless the user cancels the search)
+def get_local_ep(*args, **kwargs):
     """
-    pgr_res = transfer_client.endpoint_search(filter_scope="my-endpoints")
-    ep_candidates = pgr_res.data
-    # Check number of candidates
-    if len(ep_candidates) < 1:
-        # Nothing found
-        raise globus_sdk.GlobusError("Error: No local endpoints found")
-    elif len(ep_candidates) == 1:
-        # Exactly one candidate
-        if not ep_candidates[0]["gcp_connected"]:
-            # Is GCP, is not on
-            raise globus_sdk.GlobusError("Error: Globus Connect is not running")
-        else:
-            # Is GCServer or GCP and connected
-            return ep_candidates[0]["id"]
+    Warning:
+        DEPRECATED: Use ``globus_sdk.LocalGlobusConnectPersonal().endpoint_id`` instead.
+    """
+    if kwargs.get("warn", True):
+        raise DeprecationWarning("'get_local_ep()' has been deprecated in favor of "
+                                 "'globus_sdk.LocalGlobusConnectPersonal().endpoint_id'. "
+                                 "To override, pass in 'warn=False'.")
     else:
-        # >1 found
-        # Filter out disconnected GCP
-        ep_connections = [candidate for candidate in ep_candidates
-                          if candidate["gcp_connected"] is not False]
-        # Recheck list
-        if len(ep_connections) < 1:
-            # Nothing found
-            raise globus_sdk.GlobusError("Error: No local endpoints running")
-        elif len(ep_connections) == 1:
-            # Exactly one candidate
-            if not ep_connections[0]["gcp_connected"]:
-                # Is GCP, is not on
-                raise globus_sdk.GlobusError("Error: Globus Connect is not active")
-            else:
-                # Is GCServer or GCP and connected
-                return ep_connections[0]["id"]
-        else:
-            # Still >1 found
-            # Prompt user
-            print("Multiple endpoints found:")
-            count = 0
-            for ep in ep_connections:
-                count += 1
-                print(count, ": ", ep["display_name"], "\t", ep["id"])
-            print("\nPlease choose the endpoint on this machine")
-            ep_num = 0
-            while ep_num == 0:
-                usr_choice = input("Enter the number of the correct endpoint (-1 to cancel): ")
-                try:
-                    ep_choice = int(usr_choice)
-                    if ep_choice == -1:
-                        # User wants to quit
-                        ep_num = -1
-                    elif ep_choice in range(1, count+1):
-                        # Valid selection
-                        ep_num = ep_choice
-                    else:
-                        # Invalid number
-                        print("Invalid selection")
-                except Exception:
-                    print("Invalid input")
-
-            if ep_num == -1:
-                print("Cancelling")
-                raise SystemExit
-            return ep_connections[ep_num-1]["id"]
+        import warnings
+        warnings.warn("'get_local_ep()' has been deprecated in favor of "
+                      "'globus_sdk.LocalGlobusConnectPersonal().endpoint_id'.")
+    return globus_sdk.LocalGlobusConnectPersonal().endpoint_id
 
 
 # *************************************************
 # * Misc utilities
 # *************************************************
 
-def dict_merge(base, addition):
+def dict_merge(base, addition, append_lists=False):
     """Merge one dictionary with another, recursively.
     Fields present in addition will be added to base.
     No data from base is deleted or overwritten.
     This function does not modify either dictionary.
+    Dictionaries inside of other container types (list, etc.) are not merged,
+    as the rules for merging would be ambiguous.
 
     Arguments:
         base (dict): The dictionary being added to.
         addition (dict): The dictionary with additional data.
+        append_lists (bool): When ``True``, fields present in base and addition
+                that are lists will also be merged. Extra values from addition
+                will be appended to the list in base.
 
     Returns:
         dict: The merged base.
@@ -948,6 +895,10 @@ def dict_merge(base, addition):
         # If the value is a dict, need to merge those
         if isinstance(value, dict):
             new_base[key] = dict_merge(new_base.get(key, {}), value)
+        elif append_lists and isinstance(value, list):
+            new_list = deepcopy(new_base.get(key, []))
+            [new_list.append(item) for item in value if item not in new_list]
+            new_base[key] = new_list
         # Otherwise, if the key is not in base, add it
         elif key not in new_base.keys():
             new_base[key] = value
@@ -968,7 +919,8 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
         * Non-containers are equivalent if the equality operator returns ``True``.
         * Strings are treated as non-containers when ``string_insensitive=False``,
           and are treated as containers when ``string_insensitive=True``. When treated as
-          containers, each (case-insensitive) character is treated as an element.
+          containers, each (case-insensitive) character is treated as an element and
+          whitespace is ignored.
         * If the items are in different categories above, they are never equivalent,
           even when ``type_insensitive=True``.
 
@@ -1017,16 +969,17 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
         # Second item must be string
         if not isinstance(item2, str):
             return False
-        # Items must have the same number of elements
-        if not len(item1) == len(item2):
+        # Items must have the same number of elements (except string_insensitive)
+        if not len(item1) == len(item2) and not string_insensitive:
             return False
-        # If we're insensitive to case and order, compare characters
+        # If we're insensitive to case, spaces, and order, compare characters
         if string_insensitive:
             # If the string is one character long, skip additional comparison
             if len(item1) <= 1:
                 return item1.lower() == item2.lower()
-            item1_list = list(item1.lower())
-            item2_list = list(item2.lower())
+            # Make strings into containers (lists) and discard whitespace
+            item1_list = [c for c in item1.lower() if not c.isspace()]
+            item2_list = [c for c in item2.lower() if not c.isspace()]
             # The insensitive args shouldn't matter, but they're here just in case
             return insensitive_comparison(item1_list, item2_list,
                                           type_insensitive=type_insensitive,
@@ -1089,6 +1042,7 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
                     return False
             # All elements have a match
             return True
+    # Handle otherwise unhandled type (catchall)
     else:
         return item1 == item2
 
