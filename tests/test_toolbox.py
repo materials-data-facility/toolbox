@@ -382,7 +382,8 @@ def test_dict_merge():
             "both_key": "base",
             "level3": {
                 "base_key": "base",
-                "both_key": "base"
+                "both_key": "base",
+                "mismatch_key": "string"
             }
         }
     }
@@ -395,6 +396,7 @@ def test_dict_merge():
             "level3": {
                 "both_key": "add",
                 "add_key": "add",
+                "mismatch_key": 10,
                 "level4": {
                     "add_key": "add"
                 }
@@ -413,6 +415,7 @@ def test_dict_merge():
                 "base_key": "base",
                 "both_key": "base",
                 "add_key": "add",
+                "mismatch_key": "string",
                 "level4": {
                     "add_key": "add"
                 }
@@ -428,6 +431,9 @@ def test_dict_merge():
     m_list = {
         "list_field": ["base", "add"]
     }
+    a_list_bad = {
+        "list_field": "foo"
+    }
     # Proper use
     old_base = deepcopy(base)
     old_add = deepcopy(add)
@@ -441,6 +447,9 @@ def test_dict_merge():
     assert mdf_toolbox.dict_merge(b_list, a_list, append_lists=False) == b_list
     # With appending
     assert mdf_toolbox.dict_merge(b_list, a_list, append_lists=True) == m_list
+    # With mismatched data types
+    assert mdf_toolbox.dict_merge(b_list, a_list_bad, append_lists=False) == b_list
+    assert mdf_toolbox.dict_merge(b_list, a_list_bad, append_lists=True) == b_list
 
     assert mdf_toolbox.dict_merge({}, {}) == {}
 
