@@ -871,11 +871,18 @@ def get_local_ep(*args, **kwargs):
 
 def dict_merge(base, addition, append_lists=False):
     """Merge one dictionary with another, recursively.
-    Fields present in addition will be added to base.
+    Fields present in addition will be added to base if not present or merged
+    if both values are dictionaries or lists (with append_lists=True). If
+    the values are different data types, the value in addition will be discarded.
     No data from base is deleted or overwritten.
     This function does not modify either dictionary.
     Dictionaries inside of other container types (list, etc.) are not merged,
     as the rules for merging would be ambiguous.
+    If values from base and addition are of differing types, the value in
+    addition is discarded.
+
+    This utility could be expanded to merge Mapping and Container types in the future,
+    but currently works only with dict and list.
 
     Arguments:
         base (dict): The dictionary being added to.
@@ -892,16 +899,19 @@ def dict_merge(base, addition, append_lists=False):
 
     new_base = deepcopy(base)
     for key, value in addition.items():
-        # If the value is a dict, need to merge those
-        if isinstance(value, dict):
-            new_base[key] = dict_merge(new_base.get(key, {}), value)
-        elif append_lists and isinstance(value, list):
-            new_list = deepcopy(new_base.get(key, []))
+        # Simplest case: Key not in base, so add value to base
+        if key not in new_base.keys():
+            new_base[key] = value
+        # If the value is a dict, and base's value is also a dict, merge
+        # If there is a type disagreement, merging cannot and should not happen
+        if isinstance(value, dict) and isinstance(new_base[key], dict):
+            new_base[key] = dict_merge(new_base[key], value)
+        # If value is a list, lists should be merged, and base is compatible
+        elif append_lists and isinstance(value, list) and isinstance(new_base[key], list):
+            new_list = deepcopy(new_base[key])
             [new_list.append(item) for item in value if item not in new_list]
             new_base[key] = new_list
-        # Otherwise, if the key is not in base, add it
-        elif key not in new_base.keys():
-            new_base[key] = value
+        # If none of these trigger, discard value from addition implicitly
 
     return new_base
 
