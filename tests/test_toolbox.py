@@ -205,12 +205,12 @@ def test_format_gmeta():
                 }
             }
         }
-    gme2 = mdf_toolbox.format_gmeta(md2, ["ABCD"], "https://example.com/123456")
+    gme2 = mdf_toolbox.format_gmeta(md2, ["abcd"], "https://example.com/123456")
     assert gme2 == {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
             "subject": "https://example.com/123456",
-            "visible_to": ["ABCD"],
+            "visible_to": ["urn:globus:auth:identity:abcd", "urn:globus:groups:id:abcd"],
             "content": {
                 "mdf": {
                     "title": "test",

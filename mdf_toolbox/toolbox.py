@@ -488,6 +488,7 @@ def format_gmeta(data, acl=None, identifier=None):
         acl (list of str): The list of Globus UUIDs allowed to view the document,
                 or the special value ``["public"]`` to allow anyone access.
                 Required if data is a dict. Ignored if data is a list.
+                Will be formatted into URNs if required.
         identifier (str): A unique identifier for this document. If this value is not unique,
                 ingests into Globus Search may merge entries.
                 Required is data is a dict. Ignored if data is a list.
@@ -501,11 +502,24 @@ def format_gmeta(data, acl=None, identifier=None):
             raise ValueError("acl and identifier are required when formatting a GMetaEntry.")
         if isinstance(acl, str):
             acl = [acl]
+        # "Correctly" format ACL entries into URNs
+        prefixed_acl = []
+        for uuid in acl:
+            # If entry is not special value "public" and is not a URN, make URN
+            # It is not known what the type of UUID is, so use both
+            # This solution is known to be hacky
+            if uuid != "public" and not uuid.lower().startswith("urn:"):
+                prefixed_acl.append("urn:globus:auth:identity:"+uuid.lower())
+                prefixed_acl.append("urn:globus:groups:id:"+uuid.lower())
+            # Otherwise, no modification
+            else:
+                prefixed_acl.append(uuid)
+
         return {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
             "subject": identifier,
-            "visible_to": acl,
+            "visible_to": prefixed_acl,
             "content": data
             }
 
