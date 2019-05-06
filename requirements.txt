@@ -1,0 +1,2 @@
+-e git+https://github.com/globus/globus-identifiers-client.git#egg=identifiers_client
+

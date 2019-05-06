@@ -11,6 +11,7 @@ from globus_nexus_client import NexusClient
 import globus_sdk
 from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
+from identifiers_client.identifiers_api import IdentifierClient
 
 
 KNOWN_SCOPES = {
@@ -24,7 +25,8 @@ KNOWN_SCOPES = {
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
     "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups",
-    "dlhub": "https://auth.globus.org/scopes/81fc4156-a623-47f2-93ad-7184118226ba/auth"
+    "dlhub": "https://auth.globus.org/scopes/81fc4156-a623-47f2-93ad-7184118226ba/auth",
+    "identifiers": "https://auth.globus.org/scopes/identifiers.globus.org/create_update"
 }
 KNOWN_TOKEN_KEYS = {
     "transfer": "transfer.api.globus.org",
@@ -36,14 +38,16 @@ KNOWN_TOKEN_KEYS = {
     "mdf_connect": "mdf_dataset_submission",
     "petrel": "petrel_https_server",
     "groups": "nexus.api.globus.org",
-    "dlhub": "dlhub_org"
+    "dlhub": "dlhub_org",
+    "identifiers": "identifiers.globus.org"
 }
 KNOWN_CLIENTS = {
     "transfer": globus_sdk.TransferClient,
     "search": globus_sdk.SearchClient,
     "search_ingest": globus_sdk.SearchClient,
     #  "publish": _DataPublicationClient,  # Defined in this module, added to dict later
-    "groups": NexusClient
+    "groups": NexusClient,
+    "identifiers": IdentifierClient
 }
 SEARCH_INDEX_UUIDS = {
     "mdf": "1a57bbe5-5272-477f-9d31-343b8258b7a5",
