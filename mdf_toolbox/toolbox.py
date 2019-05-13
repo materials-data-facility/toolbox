@@ -49,6 +49,8 @@ SEARCH_INDEX_UUIDS = {
     "mdf": "1a57bbe5-5272-477f-9d31-343b8258b7a5",
     "mdf-test": "5acded0c-a534-45af-84be-dcf042e36412",
     "mdf-dev": "aeccc263-f083-45f5-ab1d-08ee702b3384",
+    "mdf-publish": "921907c6-4314-468b-a226-24edf5366cd9",
+    "mdf-publish-test": "05a5f8cc-e8cf-4ced-8426-d87cba7c0be3",
     "dlhub": "847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
     "dlhub-test": "5c89e0a9-00e5-4171-b415-814fe4d0b8af"
 }
