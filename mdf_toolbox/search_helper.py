@@ -16,7 +16,7 @@ NONADVANCED_LIMIT = 10
 OP_LIST = ["AND", "OR", "NOT"]
 
 # List of characters that should trigger automatic quotation marks
-QUOTE_LIST = [" ", "\t", "\n", "'"]
+QUOTE_LIST = [" ", "\t", "\n", "'", ".", "?", ":", "^"]
 # List of characters that should disable automatic quotation marks
 # ex. range queries
 UNQUOTE_LIST = ["[", "]", "{", "}"]
