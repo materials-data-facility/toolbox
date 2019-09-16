@@ -667,7 +667,7 @@ def globus_check_directory(transfer_client, endpoint, path, allow_missing=False)
 
     # Try operation_ls on the path, which gives actionable info about the path
     try:
-        transfer_client.operation_ls(endpoint, path)
+        transfer_client.operation_ls(endpoint, path=path)
         is_dir = True
     except globus_sdk.exc.TransferAPIError as e:
         # If error indicates path exists but is not dir, is not dir
