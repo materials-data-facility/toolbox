@@ -724,7 +724,7 @@ def globus_check_directory(transfer_client, endpoint, path, allow_missing=False)
         error = "Path '{}' not found on endpoint '{}'".format(path, endpoint)
 
     return {
-        "success": (error is not None),
+        "success": (error is None),
         "error": error,
         "exists": (exists or is_dir is not None),
         "is_dir": (is_dir is True),
