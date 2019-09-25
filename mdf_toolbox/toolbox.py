@@ -589,8 +589,12 @@ def gmeta_pop(gmeta, info=False):
         raise TypeError("gmeta must be dict, GlobusHTTPResponse, or JSON string")
     results = []
     for res in gmeta["gmeta"]:
-        for con in res["content"]:
+        # version 2017-09-01
+        for con in res.get("content", []):
             results.append(con)
+        # version 2019-08-27
+        for ent in res.get("entries", []):
+            results.append(ent["content"])
     if info:
         fyi = {
             "total_query_matches": gmeta.get("total")
