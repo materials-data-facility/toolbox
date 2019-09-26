@@ -3,13 +3,16 @@ python:
 - '3.4'
 - '3.5'
 - '3.6'
-# - '3.7'  # Unsupported on Travis
+- '3.7'
 install:
 - pip install --upgrade pip
 - pip install -e .
 - pip install -r test_requirements.txt
 env:
-- TEST_ENV=travis
+  matrix:
+  - TEST_ENV=travis
+  global:
+    secure: iDC1z+t4xhD5wk3runujsM/m9pAYpXMZb+/ufAOL4GxtXCu2Vv2tDV9SCGiQXTd8ogJYeF87wnmDNgfouBar2mPRZ8UsSKpLmjf0hniUVfBHZp9osu0y89frKNEfQ4Z3lcaG3nyRV+A9zS7hNxNh7xTGx1FE9WvGtV4BiPnG+DLAWNIAlbINYEc2ogspEG0pPOT0IpgemslzV5gRxrT0mPgCB5w2rZZnBu+Mqc7+9Q6n7kAl+naqFLZ3obpkg7KEjSbMwFso6NxQZfzSiRKG6MpOWVbfSArOMNT/rXlp+HReCbMPA8xCP7j5WrZHmzyItz1dlhrHtdpyw+QbwMCNs5ar37F3C9YdssCpuofojDr4VjcNksJtC8EgmOuohzQ8XG52PnWJY8/AW48NdfYMM+hoqBDdOwGSrJj2wocW9NLP9E00lI2fC0UmW/1Q+tJqcd5zIlNbXM4mLt5+itx+AGmxHm3k1kB6/p42FwoQNtoWXzkx0pHh9VfJ9dovGjjtZtjiN0aSTwRQocH7zgVrymytoaYRZXqvAyyPWBwi1BkUOhpEcj5WV6cIBZri0Etar17pYqGGPlU1BzJ7YkfqK+MGu41dxRAmDJO0hKk970slt16E9mRB8BSJPKwY3Ji+odn/wS6DaqOi/Uth2Zzw0RXezS3RkKDa3KuK4DCODhs=
 script:
 - flake8 . && travis_wait 50 py.test
 before_install:
