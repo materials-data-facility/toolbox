@@ -72,8 +72,8 @@ def test_confidential_login(capsys):
     # Arg creds
     assert isinstance(mdf_toolbox.confidential_login(client_id=creds["client_id"],
                                                      client_secret=creds["client_secret"],
-                                                     services=["publish"])["publish"],
-                      _DataPublicationClient)
+                                                     services=["transfer"])["transfer"],
+                      globus_sdk.TransferClient)
     # No client available
     assert isinstance(mdf_toolbox.confidential_login(creds, services="petrel")["petrel"],
                       globus_sdk.ClientCredentialsAuthorizer)
