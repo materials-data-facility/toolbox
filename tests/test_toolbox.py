@@ -26,7 +26,7 @@ def test_login(capsys, monkeypatch):
     # Test other services
     creds2 = deepcopy(credentials)
     creds2["services"] = ["search_ingest", "transfer", "data_mdf", "connect",
-                          "petrel", "publish", "groups"]
+                          "petrel", "groups"]
     res2 = mdf_toolbox.login(creds2)
     print(res2)
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
@@ -34,7 +34,6 @@ def test_login(capsys, monkeypatch):
     assert isinstance(res2.get("data_mdf"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("connect"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
-    assert isinstance(res2.get("publish"), _DataPublicationClient)
     assert isinstance(res2.get("groups"), NexusClient)
 
     # Test fetching previous tokens
@@ -93,7 +92,6 @@ def test_anonymous_login(capsys):
     res1 = mdf_toolbox.anonymous_login(["transfer", "search", "publish", "groups"])
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
     assert isinstance(res1.get("transfer"), globus_sdk.TransferClient)
-    assert isinstance(res1.get("publish"), _DataPublicationClient)
     assert isinstance(res1.get("groups"), NexusClient)
 
     # Single service works

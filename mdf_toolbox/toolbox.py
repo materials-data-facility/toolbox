@@ -9,7 +9,6 @@ import time
 
 from globus_nexus_client import NexusClient
 import globus_sdk
-from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
 
 
@@ -18,8 +17,6 @@ KNOWN_SCOPES = {
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
     "data_mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
-    "publish": ("https://auth.globus.org/scopes/"
-                "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"),
     "connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
@@ -31,7 +28,6 @@ KNOWN_TOKEN_KEYS = {
     "search": "search.api.globus.org",
     "search_ingest": "search.api.globus.org",
     "data_mdf": "data.materialsdatafacility.org",
-    "publish": "publish.api.globus.org",
     "connect": "mdf_dataset_submission",
     "mdf_connect": "mdf_dataset_submission",
     "petrel": "petrel_https_server",
@@ -42,7 +38,6 @@ KNOWN_CLIENTS = {
     "transfer": globus_sdk.TransferClient,
     "search": globus_sdk.SearchClient,
     "search_ingest": globus_sdk.SearchClient,
-    #  "publish": _DataPublicationClient,  # Defined in this module, added to dict later
     "groups": NexusClient
 }
 SEARCH_INDEX_UUIDS = {
@@ -1211,59 +1206,3 @@ def print_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level=0)
             except Exception as e:
                 print("{}Error: Unable to print information for field '{}'! ({})"
                       .format(indent*_nest_level, field, e))
-
-
-# *************************************************
-# * Clients
-# *************************************************
-
-class _DataPublicationClient(BaseClient):
-
-    def __init__(self, base_url="https://publish.globus.org/v1/api/", **kwargs):
-        app_name = kwargs.pop('app_name', 'DataPublication Client v0.1')
-        BaseClient.__init__(self, "datapublication", base_url=base_url,
-                            app_name=app_name, **kwargs)
-        self._headers['Content-Type'] = 'application/json'
-
-    def list_schemas(self, **params):
-        return self.get('schemas', params=params)
-
-    def get_schema(self, schema_id, **params):
-        return self.get('schemas/{}'.format(schema_id), params=params)
-
-    def list_collections(self, **params):
-        try:
-            return self.get('collections', params=params)
-        except Exception as e:
-            print('FAIL: {}'.format(e))
-
-    def list_datasets(self, collection_id, **params):
-        return self.get('collections/{}/datasets'.format(collection_id),
-                        params=params)
-
-    def push_metadata(self, collection, metadata, **params):
-        return self.post('collections/{}'.format(collection),
-                         json_body=metadata, params=params)
-
-    def get_dataset(self, dataset_id, **params):
-        return self.get('datasets/{}'.format(dataset_id),
-                        params=params)
-
-    def get_submission(self, submission_id, **params):
-        return self.get('submissions/{}'.format(submission_id),
-                        params=params)
-
-    def delete_submission(self, submission_id, **params):
-        return self.delete('submissions/{}'.format(submission_id),
-                           params=params)
-
-    def complete_submission(self, submission_id, **params):
-        return self.post('submissions/{}/submit'.format(submission_id),
-                         params=params)
-
-    def list_submissions(self, **params):
-        return self.get('submissions', params=params)
-
-
-# Add Toolbox clients to known clients
-KNOWN_CLIENTS["publish"] = _DataPublicationClient
