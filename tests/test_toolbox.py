@@ -6,7 +6,6 @@ import shutil
 from globus_nexus_client import NexusClient
 import globus_sdk
 import mdf_toolbox
-from mdf_toolbox.toolbox import _DataPublicationClient
 import pytest
 
 credentials = {
