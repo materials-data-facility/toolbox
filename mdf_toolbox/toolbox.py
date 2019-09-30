@@ -1117,16 +1117,17 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
         return item1 == item2
 
 
-def print_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level=0):
-    """Pretty-print a JSONSchema.
+def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level=0):
+    """Prettify a JSONSchema. Pretty-yield instead of pretty-print.
 
     Caution:
             This utility is not robust! It is intended to work only with
-            a subset of common JSONSchema patterns and does not correctly print all
-            valid JSONSchemas. Use with caution.
+            a subset of common JSONSchema patterns (mostly for MDF schemas)
+            and does not correctly prettify all valid JSONSchemas.
+            Use with caution.
 
     Arguments:
-        root (dict): The schema to pretty-print.
+        root (dict): The schema to prettify.
         num_indent_spaces (int): The number of spaces to consider one indentation level.
                 **Default:** ``4``
         use_bullets (bool): When ``True``, will prepend a dash as a bullet to properties.
@@ -1135,74 +1136,81 @@ def print_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level=0)
                 functions has gone through. Affects indentation level. It is not
                 necessary nor advised to set this argument.
                 **Default:** ``0``
+
+    Yields:
+        str: Lines of the JSONschema. To print the JSONSchema, just print each line.
+             Stylistic newlines are included as empty strings. These can be ignored
+             if a more compact style is preferred.
     """
     indent = " " * num_indent_spaces
     bullet = "- " if use_bullets else ""
-    # root should always be dict, but if not just print it
+    # root should always be dict, but if not just yield it
     if not isinstance(root, dict):
-        print("{}{}".format(indent*_nest_level, root))
+        yield "{}{}".format(indent*_nest_level, root)
         return
 
     # If "properties" is a field in root, display that instead of root's fields
     # Don't change _nest_level; we're skipping this level
     if "properties" in root.keys():
-        print_jsonschema(root["properties"], _nest_level=_nest_level)
+        yield from prettify_jsonschema(root["properties"], _nest_level=_nest_level)
         if root.get("required"):
-            print("{}Required: {}".format(indent*_nest_level, root["required"]))
-        print()  # Newline
+            yield "{}Required: {}".format(indent*_nest_level, root["required"])
+        yield ""  # Newline
     # Otherwise display the actual properties
     else:
         for field, val in root.items():
             try:
-                # Non-dict should just be printed
+                # Non-dict should just be yielded
                 if not isinstance(val, dict):
-                    print("{}{}: {}".format(indent*_nest_level, field, val))
+                    yield "{}{}: {}".format(indent*_nest_level, field, val)
                     continue
 
                 # Treat arrays differently - nesting is one level deeper
                 if val.get("items"):
                     # Base information (field, type, desc)
-                    print("{}{}{} ({} of {}): {}"
-                          .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
-                                  val["items"].get("type", "any type"),
-                                  val.get("description",
-                                          val["items"].get("description", "No description"))))
+                    yield ("{}{}{} ({} of {}): {}"
+                           .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
+                                   val["items"].get("type", "any type"),
+                                   val.get("description",
+                                           val["items"].get("description", "No description"))))
                     # List item limits
                     if val.get("minItems") and val.get("maxItems"):
                         if val["minItems"] == val["maxItems"]:
-                            print("{}{}Must have exactly {} item(s)"
-                                  .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
+                            yield ("{}{}Must have exactly {} item(s)"
+                                   .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
                         else:
-                            print("{}{}Must have between {}-{} items"
-                                  .format(indent*_nest_level, " "*len(bullet), val["minItems"],
-                                          val["maxItems"]))
+                            yield ("{}{}Must have between {}-{} items"
+                                   .format(indent*_nest_level, " "*len(bullet), val["minItems"],
+                                           val["maxItems"]))
                     elif val.get("minItems"):
-                        print("{}{}Must have at least {} item(s)"
-                              .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
+                        yield ("{}{}Must have at least {} item(s)"
+                               .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
                     elif val.get("maxItems"):
-                        print("{}{}Must have at most {} item(s)"
-                              .format(indent*_nest_level, " "*len(bullet), val["maxItems"]))
+                        yield ("{}{}Must have at most {} item(s)"
+                               .format(indent*_nest_level, " "*len(bullet), val["maxItems"]))
                     # Recurse through properties
                     if val["items"].get("properties"):
-                        print_jsonschema(val["items"]["properties"], _nest_level=_nest_level+1)
+                        yield from prettify_jsonschema(val["items"]["properties"],
+                                                       _nest_level=_nest_level+1)
                     # List required properties
                     if val["items"].get("required"):
-                        print("{}Required: {}"
-                              .format(indent*(_nest_level+1), val["items"]["required"]))
-                    print()  # Newline
+                        yield ("{}Required: {}"
+                               .format(indent*(_nest_level+1), val["items"]["required"]))
+                    yield ""  # Newline
                 else:
                     # Base information (field, type, desc)
-                    print("{}{}{} ({}): {}"
-                          .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
-                                  val.get("description", "No description")))
+                    yield ("{}{}{} ({}): {}"
+                           .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
+                                   val.get("description", "No description")))
                     # Recurse through properties
                     if val.get("properties"):
-                        print_jsonschema(val["properties"], _nest_level=_nest_level+1)
+                        yield from prettify_jsonschema(val["properties"],
+                                                       _nest_level=_nest_level+1)
                     # List required properties
                     if val.get("required"):
-                        print("{}Required: {}".format(indent*(_nest_level+1), val["required"]))
-                    print()  # Newline
+                        yield "{}Required: {}".format(indent*(_nest_level+1), val["required"])
+                    yield ""  # Newline
 
             except Exception as e:
-                print("{}Error: Unable to print information for field '{}'! ({})"
-                      .format(indent*_nest_level, field, e))
+                yield ("{}Error: Unable to prettify information for field '{}'! ({})"
+                       .format(indent*_nest_level, field, e))
