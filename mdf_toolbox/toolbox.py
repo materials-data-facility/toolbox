@@ -9,7 +9,6 @@ import time
 
 from globus_nexus_client import NexusClient
 import globus_sdk
-from globus_sdk.base import BaseClient
 from globus_sdk.response import GlobusHTTPResponse
 
 
@@ -18,8 +17,6 @@ KNOWN_SCOPES = {
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
     "data_mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
-    "publish": ("https://auth.globus.org/scopes/"
-                "ab24b500-37a2-4bad-ab66-d8232c18e6e5/publish_api"),
     "connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
@@ -31,7 +28,6 @@ KNOWN_TOKEN_KEYS = {
     "search": "search.api.globus.org",
     "search_ingest": "search.api.globus.org",
     "data_mdf": "data.materialsdatafacility.org",
-    "publish": "publish.api.globus.org",
     "connect": "mdf_dataset_submission",
     "mdf_connect": "mdf_dataset_submission",
     "petrel": "petrel_https_server",
@@ -42,7 +38,6 @@ KNOWN_CLIENTS = {
     "transfer": globus_sdk.TransferClient,
     "search": globus_sdk.SearchClient,
     "search_ingest": globus_sdk.SearchClient,
-    #  "publish": _DataPublicationClient,  # Defined in this module, added to dict later
     "groups": NexusClient
 }
 SEARCH_INDEX_UUIDS = {
@@ -589,8 +584,12 @@ def gmeta_pop(gmeta, info=False):
         raise TypeError("gmeta must be dict, GlobusHTTPResponse, or JSON string")
     results = []
     for res in gmeta["gmeta"]:
-        for con in res["content"]:
+        # version 2017-09-01
+        for con in res.get("content", []):
             results.append(con)
+        # version 2019-08-27
+        for ent in res.get("entries", []):
+            results.append(ent["content"])
     if info:
         fyi = {
             "total_query_matches": gmeta.get("total")
@@ -1118,148 +1117,227 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
         return item1 == item2
 
 
-def print_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level=0):
-    """Pretty-print a JSONSchema.
+def expand_jsonschema(schema, base_path, definitions=None):
+    """Expand the local references in a JSONSchema and return the dereferenced schema.
+    Note:
+        This function only dereferences simple local ``$ref`` values. It does not
+        dereference ``$ref`` values that point to nonlocal resources (HTTP links, etc.),
+        or are sufficiently complex. This tool is not exhaustive.
+
+    Arguments:
+        schema (dict): The JSONSchema to dereference.
+        base_path (str): The path to the local schema files.
+        definitions (dict): Referenced definitions to start. Fully optional.
+                **Default:** ``None``, to automatically populate definitions.
+
+    Returns:
+        dict: The dereferenced schema.
+    """
+    if definitions is None:
+        definitions = {}
+
+    if not isinstance(schema, dict):
+        return schema  # No-op on non-dict
+    # Save schema's definitions
+    # Could results in duplicate definitions, which has no effect
+    if schema.get("definitions"):
+        definitions = dict_merge(schema["definitions"], definitions)
+        definitions = expand_jsonschema(definitions, base_path, definitions)
+    while "$ref" in json.dumps(schema):
+        new_schema = {}
+        for key, val in schema.items():
+            if key == "$ref":
+                # $ref is supposed to take precedence, and effectively overwrite
+                # other keys present, so we can make new_schema exactly the $ref value
+                filename, intra_path = val.split("#")
+                intra_parts = [x for x in intra_path.split("/") if x]
+                # Filename ref refers to external file - load and add in
+                if filename:
+                    with open(os.path.join(base_path, filename)) as schema_file:
+                        ref_schema = json.load(schema_file)
+                    if ref_schema.get("definitions"):
+                        definitions = dict_merge(ref_schema["definitions"], definitions)
+                        definitions = expand_jsonschema(definitions, base_path, definitions)
+                    for path_part in intra_parts:
+                        ref_schema = ref_schema[path_part]
+                    # new_schema[intra_parts[-1]] = ref_schema
+                    new_schema = ref_schema
+                # Other refs should be in definitions block
+                else:
+                    if intra_parts[0] != "definitions" or len(intra_parts) != 2:
+                        raise ValueError("Invalid/complex $ref: {}".format(intra_parts))
+                    # new_schema[intra_parts[-1]] = definitions.get(intra_parts[1], "NONE")
+                    new_schema = definitions.get(intra_parts[1], None)
+                    if new_schema is None:
+                        raise ValueError("Definition missing: {}".format(intra_parts))
+            else:
+                new_schema[key] = expand_jsonschema(val, base_path, definitions)
+        schema = new_schema
+    return schema
+
+
+def prettify_jsonschema(root, **kwargs):
+    """Prettify a JSONSchema. Pretty-yield instead of pretty-print.
 
     Caution:
             This utility is not robust! It is intended to work only with
-            a subset of common JSONSchema patterns and does not correctly print all
-            valid JSONSchemas. Use with caution.
+            a subset of common JSONSchema patterns (mostly for MDF schemas)
+            and does not correctly prettify all valid JSONSchemas.
+            Use with caution.
 
     Arguments:
-        root (dict): The schema to pretty-print.
+        root (dict): The schema to prettify.
+
+    Keyword Arguments:
         num_indent_spaces (int): The number of spaces to consider one indentation level.
                 **Default:** ``4``
-        use_bullets (bool): When ``True``, will prepend a dash as a bullet to properties.
-                When ``False``, will not. **Default:** ``True``
+        bullet (bool or str): Will prepend the character given as a bullet to properties.
+                When ``True``, will use a dash. When ``False``, will not use any bullets.
+                **Default:** ``True``
         _nest_level (int): A variable to track the number of iterations this recursive
                 functions has gone through. Affects indentation level. It is not
                 necessary nor advised to set this argument.
                 **Default:** ``0``
+
+    Yields:
+        str: Lines of the JSONschema. To print the JSONSchema, just print each line.
+             Stylistic newlines are included as empty strings. These can be ignored
+             if a more compact style is preferred.
     """
-    indent = " " * num_indent_spaces
-    bullet = "- " if use_bullets else ""
-    # root should always be dict, but if not just print it
+    indent = " " * kwargs.get("num_indent_spaces", 4)
+    if kwargs.get("bullet", True) is True:
+        bullet = "- "
+    else:
+        bullet = kwargs.get("bullet") or ""
+    _nest_level = kwargs.pop("_nest_level", 0)
+    # root should always be dict, but if not just yield it
     if not isinstance(root, dict):
-        print("{}{}".format(indent*_nest_level, root))
+        yield "{}{}".format(indent*_nest_level, root)
         return
 
     # If "properties" is a field in root, display that instead of root's fields
     # Don't change _nest_level; we're skipping this level
     if "properties" in root.keys():
-        print_jsonschema(root["properties"], _nest_level=_nest_level)
+        yield from prettify_jsonschema(root["properties"], _nest_level=_nest_level, **kwargs)
         if root.get("required"):
-            print("{}Required: {}".format(indent*_nest_level, root["required"]))
-        print()  # Newline
+            yield "{}Required: {}".format(indent*_nest_level, root["required"])
+        yield ""  # Newline
     # Otherwise display the actual properties
     else:
         for field, val in root.items():
             try:
-                # Non-dict should just be printed
+                # Non-dict should just be yielded
                 if not isinstance(val, dict):
-                    print("{}{}: {}".format(indent*_nest_level, field, val))
+                    yield "{}{}: {}".format(indent*_nest_level, field, val)
                     continue
 
                 # Treat arrays differently - nesting is one level deeper
                 if val.get("items"):
                     # Base information (field, type, desc)
-                    print("{}{}{} ({} of {}): {}"
-                          .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
-                                  val["items"].get("type", "any type"),
-                                  val.get("description",
-                                          val["items"].get("description", "No description"))))
+                    yield ("{}{}{} ({} of {}): {}"
+                           .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
+                                   val["items"].get("type", "any type"),
+                                   val.get("description",
+                                           val["items"].get("description", "No description"))))
                     # List item limits
                     if val.get("minItems") and val.get("maxItems"):
                         if val["minItems"] == val["maxItems"]:
-                            print("{}{}Must have exactly {} item(s)"
-                                  .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
+                            yield ("{}{}Must have exactly {} item(s)"
+                                   .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
                         else:
-                            print("{}{}Must have between {}-{} items"
-                                  .format(indent*_nest_level, " "*len(bullet), val["minItems"],
-                                          val["maxItems"]))
+                            yield ("{}{}Must have between {}-{} items"
+                                   .format(indent*_nest_level, " "*len(bullet), val["minItems"],
+                                           val["maxItems"]))
                     elif val.get("minItems"):
-                        print("{}{}Must have at least {} item(s)"
-                              .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
+                        yield ("{}{}Must have at least {} item(s)"
+                               .format(indent*_nest_level, " "*len(bullet), val["minItems"]))
                     elif val.get("maxItems"):
-                        print("{}{}Must have at most {} item(s)"
-                              .format(indent*_nest_level, " "*len(bullet), val["maxItems"]))
+                        yield ("{}{}Must have at most {} item(s)"
+                               .format(indent*_nest_level, " "*len(bullet), val["maxItems"]))
                     # Recurse through properties
                     if val["items"].get("properties"):
-                        print_jsonschema(val["items"]["properties"], _nest_level=_nest_level+1)
+                        yield from prettify_jsonschema(val["items"]["properties"],
+                                                       _nest_level=_nest_level+1, **kwargs)
                     # List required properties
                     if val["items"].get("required"):
-                        print("{}Required: {}"
-                              .format(indent*(_nest_level+1), val["items"]["required"]))
-                    print()  # Newline
+                        yield ("{}Required: {}"
+                               .format(indent*(_nest_level+1), val["items"]["required"]))
+                    yield ""  # Newline
                 else:
                     # Base information (field, type, desc)
-                    print("{}{}{} ({}): {}"
-                          .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
-                                  val.get("description", "No description")))
+                    yield ("{}{}{} ({}): {}"
+                           .format(indent*_nest_level, bullet, field, val.get("type", "any type"),
+                                   val.get("description", "No description")))
                     # Recurse through properties
                     if val.get("properties"):
-                        print_jsonschema(val["properties"], _nest_level=_nest_level+1)
+                        yield from prettify_jsonschema(val["properties"],
+                                                       _nest_level=_nest_level+1, **kwargs)
                     # List required properties
                     if val.get("required"):
-                        print("{}Required: {}".format(indent*(_nest_level+1), val["required"]))
-                    print()  # Newline
+                        yield "{}Required: {}".format(indent*(_nest_level+1), val["required"])
+                    yield ""  # Newline
 
             except Exception as e:
-                print("{}Error: Unable to print information for field '{}'! ({})"
-                      .format(indent*_nest_level, field, e))
+                yield ("{}Error: Unable to prettify information for field '{}'! ({})"
+                       .format(indent*_nest_level, field, e))
 
 
-# *************************************************
-# * Clients
-# *************************************************
+def prettify_json(root, **kwargs):
+    """Prettify a JSON object or list. Pretty-yield instead of pretty-print.
 
-class _DataPublicationClient(BaseClient):
+    Arguments:
+        root (dict): The JSON to prettify.
 
-    def __init__(self, base_url="https://publish.globus.org/v1/api/", **kwargs):
-        app_name = kwargs.pop('app_name', 'DataPublication Client v0.1')
-        BaseClient.__init__(self, "datapublication", base_url=base_url,
-                            app_name=app_name, **kwargs)
-        self._headers['Content-Type'] = 'application/json'
+    Keyword Arguments:
+        num_indent_spaces (int): The number of spaces to consider one indentation level.
+                **Default:** ``4``
+        inline_singles (bool): When ``True``, will give non-container values inline
+                for dictionary keys (e.g. "key: value"). When ``False``, will
+                give non-container values on a separate line, like container values.
+                **Default:** ``True``
+        bullet (bool or str): Will prepend the character given as a bullet to properties.
+                When ``True``, will use a dash. When ``False``, will not use any bullets.
+                **Default:** ``True``
+        _nest_level (int): A variable to track the number of iterations this recursive
+                functions has gone through. Affects indentation level. It is not
+                necessary nor advised to set this argument.
+                **Default:** ``0``
 
-    def list_schemas(self, **params):
-        return self.get('schemas', params=params)
+    Yields:
+        str: Lines of the prettified JSON, which can be directly printed if desired.
+             Stylistic newlines are included as empty strings. These can be ignored
+             if a more compact style is preferred.
+    """
+    indent = " " * kwargs.get("num_indent_spaces", 4)
+    inline = kwargs.get("inline_singles", True)
+    if kwargs.get("bullet", True) is True:
+        bullet = "- "
+    else:
+        bullet = kwargs.get("bullet") or ""
+    _nest_level = kwargs.pop("_nest_level", 0)
+    if not root and root is not False:
+        root = "None"
 
-    def get_schema(self, schema_id, **params):
-        return self.get('schemas/{}'.format(schema_id), params=params)
-
-    def list_collections(self, **params):
-        try:
-            return self.get('collections', params=params)
-        except Exception as e:
-            print('FAIL: {}'.format(e))
-
-    def list_datasets(self, collection_id, **params):
-        return self.get('collections/{}/datasets'.format(collection_id),
-                        params=params)
-
-    def push_metadata(self, collection, metadata, **params):
-        return self.post('collections/{}'.format(collection),
-                         json_body=metadata, params=params)
-
-    def get_dataset(self, dataset_id, **params):
-        return self.get('datasets/{}'.format(dataset_id),
-                        params=params)
-
-    def get_submission(self, submission_id, **params):
-        return self.get('submissions/{}'.format(submission_id),
-                        params=params)
-
-    def delete_submission(self, submission_id, **params):
-        return self.delete('submissions/{}'.format(submission_id),
-                           params=params)
-
-    def complete_submission(self, submission_id, **params):
-        return self.post('submissions/{}/submit'.format(submission_id),
-                         params=params)
-
-    def list_submissions(self, **params):
-        return self.get('submissions', params=params)
-
-
-# Add Toolbox clients to known clients
-KNOWN_CLIENTS["publish"] = _DataPublicationClient
+    # Prettify key/value pair
+    if isinstance(root, dict):
+        for k, v in root.items():
+            # Containers and non-inline values should be recursively prettified
+            if not inline or isinstance(v, dict) or isinstance(v, list):
+                # Indent/bullet + key name
+                yield "{}{}{}:".format(indent*_nest_level, bullet, k)
+                # Value prettified with additional indent
+                yield from prettify_json(v, _nest_level=_nest_level+1, **kwargs)
+            # Otherwise, can prettify inline
+            else:
+                pretty_value = next(prettify_json(v, bullet=False, _nest_level=0))
+                yield "{}{}{}: {}".format(indent*_nest_level, bullet, k, pretty_value)
+            yield ""  # Newline
+    # Prettify each item
+    elif isinstance(root, list):
+        for item in root:
+            # Prettify values
+            # No additional indent - nothing at top-level
+            yield from prettify_json(item, _nest_level=_nest_level, **kwargs)
+    # Just yield item
+    else:
+        yield "{}{}{}".format(indent*_nest_level, bullet, root)
