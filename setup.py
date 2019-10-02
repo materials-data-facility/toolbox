@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='mdf_toolbox',
-    version='0.4.9',
+    version='0.4.10',
     packages=['mdf_toolbox'],
     description='Materials Data Facility Python utilities',
     long_description=("Toolbox is the Materials Data Facility Python package"

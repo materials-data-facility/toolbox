@@ -1117,7 +1117,66 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
         return item1 == item2
 
 
-def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level=0):
+def expand_jsonschema(schema, base_path, definitions=None):
+    """Expand the local references in a JSONSchema and return the dereferenced schema.
+    Note:
+        This function only dereferences simple local ``$ref`` values. It does not
+        dereference ``$ref`` values that point to nonlocal resources (HTTP links, etc.),
+        or are sufficiently complex. This tool is not exhaustive.
+
+    Arguments:
+        schema (dict): The JSONSchema to dereference.
+        base_path (str): The path to the local schema files.
+        definitions (dict): Referenced definitions to start. Fully optional.
+                **Default:** ``None``, to automatically populate definitions.
+
+    Returns:
+        dict: The dereferenced schema.
+    """
+    if definitions is None:
+        definitions = {}
+
+    if not isinstance(schema, dict):
+        return schema  # No-op on non-dict
+    # Save schema's definitions
+    # Could results in duplicate definitions, which has no effect
+    if schema.get("definitions"):
+        definitions = dict_merge(schema["definitions"], definitions)
+        definitions = expand_jsonschema(definitions, base_path, definitions)
+    while "$ref" in json.dumps(schema):
+        new_schema = {}
+        for key, val in schema.items():
+            if key == "$ref":
+                # $ref is supposed to take precedence, and effectively overwrite
+                # other keys present, so we can make new_schema exactly the $ref value
+                filename, intra_path = val.split("#")
+                intra_parts = [x for x in intra_path.split("/") if x]
+                # Filename ref refers to external file - load and add in
+                if filename:
+                    with open(os.path.join(base_path, filename)) as schema_file:
+                        ref_schema = json.load(schema_file)
+                    if ref_schema.get("definitions"):
+                        definitions = dict_merge(ref_schema["definitions"], definitions)
+                        definitions = expand_jsonschema(definitions, base_path, definitions)
+                    for path_part in intra_parts:
+                        ref_schema = ref_schema[path_part]
+                    # new_schema[intra_parts[-1]] = ref_schema
+                    new_schema = ref_schema
+                # Other refs should be in definitions block
+                else:
+                    if intra_parts[0] != "definitions" or len(intra_parts) != 2:
+                        raise ValueError("Invalid/complex $ref: {}".format(intra_parts))
+                    # new_schema[intra_parts[-1]] = definitions.get(intra_parts[1], "NONE")
+                    new_schema = definitions.get(intra_parts[1], None)
+                    if new_schema is None:
+                        raise ValueError("Definition missing: {}".format(intra_parts))
+            else:
+                new_schema[key] = expand_jsonschema(val, base_path, definitions)
+        schema = new_schema
+    return schema
+
+
+def prettify_jsonschema(root, **kwargs):
     """Prettify a JSONSchema. Pretty-yield instead of pretty-print.
 
     Caution:
@@ -1128,10 +1187,13 @@ def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level
 
     Arguments:
         root (dict): The schema to prettify.
+
+    Keyword Arguments:
         num_indent_spaces (int): The number of spaces to consider one indentation level.
                 **Default:** ``4``
-        use_bullets (bool): When ``True``, will prepend a dash as a bullet to properties.
-                When ``False``, will not. **Default:** ``True``
+        bullet (bool or str): Will prepend the character given as a bullet to properties.
+                When ``True``, will use a dash. When ``False``, will not use any bullets.
+                **Default:** ``True``
         _nest_level (int): A variable to track the number of iterations this recursive
                 functions has gone through. Affects indentation level. It is not
                 necessary nor advised to set this argument.
@@ -1142,8 +1204,12 @@ def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level
              Stylistic newlines are included as empty strings. These can be ignored
              if a more compact style is preferred.
     """
-    indent = " " * num_indent_spaces
-    bullet = "- " if use_bullets else ""
+    indent = " " * kwargs.get("num_indent_spaces", 4)
+    if kwargs.get("bullet", True) is True:
+        bullet = "- "
+    else:
+        bullet = kwargs.get("bullet") or ""
+    _nest_level = kwargs.pop("_nest_level", 0)
     # root should always be dict, but if not just yield it
     if not isinstance(root, dict):
         yield "{}{}".format(indent*_nest_level, root)
@@ -1152,7 +1218,7 @@ def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level
     # If "properties" is a field in root, display that instead of root's fields
     # Don't change _nest_level; we're skipping this level
     if "properties" in root.keys():
-        yield from prettify_jsonschema(root["properties"], _nest_level=_nest_level)
+        yield from prettify_jsonschema(root["properties"], _nest_level=_nest_level, **kwargs)
         if root.get("required"):
             yield "{}Required: {}".format(indent*_nest_level, root["required"])
         yield ""  # Newline
@@ -1191,7 +1257,7 @@ def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level
                     # Recurse through properties
                     if val["items"].get("properties"):
                         yield from prettify_jsonschema(val["items"]["properties"],
-                                                       _nest_level=_nest_level+1)
+                                                       _nest_level=_nest_level+1, **kwargs)
                     # List required properties
                     if val["items"].get("required"):
                         yield ("{}Required: {}"
@@ -1205,7 +1271,7 @@ def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level
                     # Recurse through properties
                     if val.get("properties"):
                         yield from prettify_jsonschema(val["properties"],
-                                                       _nest_level=_nest_level+1)
+                                                       _nest_level=_nest_level+1, **kwargs)
                     # List required properties
                     if val.get("required"):
                         yield "{}Required: {}".format(indent*(_nest_level+1), val["required"])
@@ -1214,3 +1280,64 @@ def prettify_jsonschema(root, num_indent_spaces=4, use_bullets=True, _nest_level
             except Exception as e:
                 yield ("{}Error: Unable to prettify information for field '{}'! ({})"
                        .format(indent*_nest_level, field, e))
+
+
+def prettify_json(root, **kwargs):
+    """Prettify a JSON object or list. Pretty-yield instead of pretty-print.
+
+    Arguments:
+        root (dict): The JSON to prettify.
+
+    Keyword Arguments:
+        num_indent_spaces (int): The number of spaces to consider one indentation level.
+                **Default:** ``4``
+        inline_singles (bool): When ``True``, will give non-container values inline
+                for dictionary keys (e.g. "key: value"). When ``False``, will
+                give non-container values on a separate line, like container values.
+                **Default:** ``True``
+        bullet (bool or str): Will prepend the character given as a bullet to properties.
+                When ``True``, will use a dash. When ``False``, will not use any bullets.
+                **Default:** ``True``
+        _nest_level (int): A variable to track the number of iterations this recursive
+                functions has gone through. Affects indentation level. It is not
+                necessary nor advised to set this argument.
+                **Default:** ``0``
+
+    Yields:
+        str: Lines of the prettified JSON, which can be directly printed if desired.
+             Stylistic newlines are included as empty strings. These can be ignored
+             if a more compact style is preferred.
+    """
+    indent = " " * kwargs.get("num_indent_spaces", 4)
+    inline = kwargs.get("inline_singles", True)
+    if kwargs.get("bullet", True) is True:
+        bullet = "- "
+    else:
+        bullet = kwargs.get("bullet") or ""
+    _nest_level = kwargs.pop("_nest_level", 0)
+    if not root and root is not False:
+        root = "None"
+
+    # Prettify key/value pair
+    if isinstance(root, dict):
+        for k, v in root.items():
+            # Containers and non-inline values should be recursively prettified
+            if not inline or isinstance(v, dict) or isinstance(v, list):
+                # Indent/bullet + key name
+                yield "{}{}{}:".format(indent*_nest_level, bullet, k)
+                # Value prettified with additional indent
+                yield from prettify_json(v, _nest_level=_nest_level+1, **kwargs)
+            # Otherwise, can prettify inline
+            else:
+                pretty_value = next(prettify_json(v, bullet=False, _nest_level=0))
+                yield "{}{}{}: {}".format(indent*_nest_level, bullet, k, pretty_value)
+            yield ""  # Newline
+    # Prettify each item
+    elif isinstance(root, list):
+        for item in root:
+            # Prettify values
+            # No additional indent - nothing at top-level
+            yield from prettify_json(item, _nest_level=_nest_level, **kwargs)
+    # Just yield item
+    else:
+        yield "{}{}{}".format(indent*_nest_level, bullet, root)
