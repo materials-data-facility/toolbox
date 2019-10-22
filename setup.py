@@ -2,17 +2,18 @@ from setuptools import setup
 
 setup(
     name='mdf_toolbox',
-    version='0.4.10',
+    version='0.5.0',
     packages=['mdf_toolbox'],
     description='Materials Data Facility Python utilities',
     long_description=("Toolbox is the Materials Data Facility Python package"
                       " containing utility functions and other tools."),
     install_requires=[
+        "fair-research-login>=0.1.5",
         "globus_nexus_client>=0.2.8",
         "globus-sdk>=1.7.0",
         "requests>=2.18.4"
     ],
-    python_requires=">=3.4",
+    python_requires=">=3.5",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "License :: OSI Approved :: Apache Software License",

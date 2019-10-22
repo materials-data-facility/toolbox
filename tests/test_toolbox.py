@@ -11,42 +11,28 @@ import pytest
 credentials = {
     "app_name": "MDF_Forge",
     "services": []
-    }
+}
 
 
-def test_login(capsys, monkeypatch):
+def test_login():
     # Login works
     creds1 = deepcopy(credentials)
     creds1["services"] = ["search"]
-    res1 = mdf_toolbox.login(creds1)
+    res1 = mdf_toolbox.login(**creds1)
     assert type(res1) is dict
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
 
     # Test other services
     creds2 = deepcopy(credentials)
-    creds2["services"] = ["search_ingest", "transfer", "data_mdf", "connect",
+    creds2["services"] = ["search_ingest", "transfer", "data_mdf", "mdf_connect",
                           "petrel", "groups"]
-    res2 = mdf_toolbox.login(creds2)
-    print(res2)
+    res2 = mdf_toolbox.login(**creds2)
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res2.get("data_mdf"), globus_sdk.RefreshTokenAuthorizer)
-    assert isinstance(res2.get("connect"), globus_sdk.RefreshTokenAuthorizer)
+    assert isinstance(res2.get("mdf_connect"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("groups"), NexusClient)
-
-    # Test fetching previous tokens
-    creds = deepcopy(credentials)
-    assert mdf_toolbox.login(creds).get("petrel_https_server")
-
-    # Error on bad creds
-    with pytest.raises(ValueError):
-        mdf_toolbox.login("nope")
-
-    # TODO: Test user input prompt
-    # monkeypatch.setattr(mdf_toolbox, "input", (lambda x=None: "invalid"))
-    # with pytest.raises(ValueError):
-    #    mdf_toolbox.login()
 
 
 def test_confidential_login(capsys):
@@ -55,33 +41,30 @@ def test_confidential_login(capsys):
         creds = json.load(f)
 
     # Single services, different cases
-    assert isinstance(mdf_toolbox.confidential_login(creds, services="transfer")["transfer"],
+    assert isinstance(mdf_toolbox.confidential_login(services="transfer", **creds)["transfer"],
                       globus_sdk.TransferClient)
-    assert isinstance(mdf_toolbox.confidential_login(creds, services=["search"])["search"],
+    assert isinstance(mdf_toolbox.confidential_login(services=["search"], **creds)["search"],
                       globus_sdk.SearchClient)
     # Manual scope set
     assert isinstance(mdf_toolbox.confidential_login(
-                                    creds,
-                                    services="urn:globus:auth:scope:transfer.api.globus.org:all"
-                                    )["urn:globus:auth:scope:transfer.api.globus.org:all"],
-                      globus_sdk.ClientCredentialsAuthorizer)
+                                    services="urn:globus:auth:scope:transfer.api.globus.org:all",
+                                    **creds)["urn:globus:auth:scope:transfer.api.globus.org:all"],
+                      globus_sdk.TransferClient)
     # make_clients=False
     assert isinstance(mdf_toolbox.confidential_login(
-                                    creds, services="transfer", make_clients=False)["transfer"],
+                                    services="transfer", make_clients=False, **creds)["transfer"],
                       globus_sdk.ClientCredentialsAuthorizer)
-    # Arg creds
-    assert isinstance(mdf_toolbox.confidential_login(client_id=creds["client_id"],
-                                                     client_secret=creds["client_secret"],
-                                                     services=["transfer"])["transfer"],
-                      globus_sdk.TransferClient)
+    assert isinstance(mdf_toolbox.confidential_login(
+                                    services="urn:globus:auth:scope:transfer.api.globus.org:all",
+                                    make_clients=False,
+                                    **creds)["urn:globus:auth:scope:transfer.api.globus.org:all"],
+                      globus_sdk.ClientCredentialsAuthorizer)
     # No client available
-    assert isinstance(mdf_toolbox.confidential_login(creds, services="petrel")["petrel"],
+    assert isinstance(mdf_toolbox.confidential_login(services="petrel", **creds)["petrel"],
                       globus_sdk.ClientCredentialsAuthorizer)
 
-    # No scope
-    assert mdf_toolbox.confidential_login(creds) == {}
     # Bad scope
-    assert mdf_toolbox.confidential_login(creds, services="invalid") == {}
+    assert mdf_toolbox.confidential_login(services="invalid", **creds) == {}
     out, err = capsys.readouterr()
     assert "Error: Cannot create authorizer for scope 'invalid'" in out
 
@@ -102,25 +85,6 @@ def test_anonymous_login(capsys):
     out, err = capsys.readouterr()
     assert "Error: No known client for 'garbage' service." in out
     assert "Error: No known client for 'invalid' service." in out
-
-
-def test_logout():
-    # Credentials should exist
-    assert os.path.exists(os.path.join(mdf_toolbox.DEFAULT_CRED_PATH,
-                                       credentials["app_name"]+"_tokens.json"))
-    # Copy credentials out
-    shutil.copytree(mdf_toolbox.DEFAULT_CRED_PATH, "temp_tokens")
-
-    try:
-        mdf_toolbox.logout()
-        assert not os.path.exists(os.path.join(mdf_toolbox.DEFAULT_CRED_PATH,
-                                               credentials["app_name"]+"_tokens.json"))
-    # Always reset credentials
-    finally:
-        # Must delete token dir so copytree will copy correctly
-        shutil.rmtree(mdf_toolbox.DEFAULT_CRED_PATH)
-        shutil.copytree("temp_tokens", mdf_toolbox.DEFAULT_CRED_PATH)
-        shutil.rmtree("temp_tokens")
 
 
 def test_uncompress_tree():
@@ -326,7 +290,6 @@ def test_gmeta_pop():
             }
         }]
     info_pop = mdf_toolbox.gmeta_pop(ghttp, info=True)
-    print(info_pop)
     assert info_pop == (popped, {'total_query_matches': 22})
 
     # String loading
