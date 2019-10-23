@@ -37,7 +37,7 @@ def test_login():
 
 def test_confidential_login(capsys):
     # Load creds
-    with open(os.path.expanduser("~/.mdf/credentials/client_credentials.json")) as f:
+    with open(os.path.expanduser("~/.client_credentials.json")) as f:
         creds = json.load(f)
 
     # Single services, different cases

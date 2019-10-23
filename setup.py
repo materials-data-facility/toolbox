@@ -13,7 +13,7 @@ setup(
         "globus-sdk>=1.7.0",
         "requests>=2.18.4"
     ],
-    python_requires=">=3.5",
+    python_requires=">=3.4",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "License :: OSI Approved :: Apache Software License",
