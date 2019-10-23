@@ -9,7 +9,8 @@ from mdf_toolbox.search_helper import (SearchHelper, _validate_query,
                                        BLANK_QUERY, SEARCH_LIMIT)
 
 # Manually logging in for SearchHelper testing
-SEARCH_CLIENT = mdf_toolbox.login(services=["search"], app_name="SearchHelper_Client")["search"]
+SEARCH_CLIENT = mdf_toolbox.login(services=["search"], app_name="SearchHelper",
+                                  client_id="878721f5-6b92-411e-beac-830672c0f69a")["search"]
 INDEX = "mdf"
 
 # For purely historical reasons, internal-function tests create a SearchHelper

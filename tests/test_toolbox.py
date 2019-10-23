@@ -8,31 +8,26 @@ import globus_sdk
 import mdf_toolbox
 import pytest
 
-credentials = {
-    "app_name": "MDF_Forge",
-    "services": []
-}
-
 
 def test_login():
     # Login works
-    creds1 = deepcopy(credentials)
-    creds1["services"] = ["search"]
-    res1 = mdf_toolbox.login(**creds1)
+    # Impersonate Forge
+    res1 = mdf_toolbox.login(services="search", app_name="MDF_Forge",
+                             client_id="b2b437c4-17c1-4e4b-8f15-e9783e1312d7")
     assert type(res1) is dict
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
 
     # Test other services
-    creds2 = deepcopy(credentials)
-    creds2["services"] = ["search_ingest", "transfer", "data_mdf", "mdf_connect",
-                          "petrel", "groups"]
-    res2 = mdf_toolbox.login(**creds2)
+    # Use default "unknown app"
+    # TODO: "groups" cannot be tested without whitelisting app
+    res2 = mdf_toolbox.login(services=["search_ingest", "transfer", "data_mdf", "mdf_connect",
+                                       "petrel"])
     assert isinstance(res2.get("search_ingest"), globus_sdk.SearchClient)
     assert isinstance(res2.get("transfer"), globus_sdk.TransferClient)
     assert isinstance(res2.get("data_mdf"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("mdf_connect"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
-    assert isinstance(res2.get("groups"), NexusClient)
+    # assert isinstance(res2.get("groups"), NexusClient)
 
 
 def test_confidential_login(capsys):
