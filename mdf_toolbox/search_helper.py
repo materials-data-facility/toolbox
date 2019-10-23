@@ -111,7 +111,7 @@ def _validate_query(query):
 # * SearchHelper
 # ****************************************************************************************
 
-class SearchHelper:
+class SearchHelper():
     """Utility class for performing queries using a ``globus_sdk.SearchClient``.
 
     Notes:
@@ -119,7 +119,8 @@ class SearchHelper:
         It is inadvisable to use the "private" methods to modify the query string directly,
         as the low-level logic for query string generation is not as user-friendly.
     """
-    __app_name = "SearchHelper_Client"
+    __app_name = "SearchHelper"
+    __client_id = "878721f5-6b92-411e-beac-830672c0f69a"
 
     def __init__(self, index, **kwargs):
         """Create a SearchHelper object.
@@ -146,7 +147,7 @@ class SearchHelper:
                     **Default**: ``"SearchHelper_Client"``.
             client_id (str): The ID of a native client to use when authenticating.
                     Only used if performing login flow.
-                    **Default**: The ID of the MDF Native Clients native client.
+                    **Default**: The default SearchHelper client ID.
 
             q (str): A query string to initialize the SearchHelper with.
                     Intended for internal use.
@@ -160,7 +161,7 @@ class SearchHelper:
         else:
             self.__search_client = mdf_toolbox.login(
                                         app_name=kwargs.get("app_name", self.__app_name),
-                                        client_id=kwargs.get("client_id", None),
+                                        client_id=kwargs.get("client_id", self.__client_id),
                                         services=["search"])["search"]
 
         # Get the UUID for the index if the name was provided
