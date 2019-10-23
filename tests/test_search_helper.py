@@ -1,7 +1,5 @@
 from copy import deepcopy
-import os
 import re
-import shutil
 
 from globus_sdk import SearchAPIError
 import pytest
@@ -11,11 +9,8 @@ from mdf_toolbox.search_helper import (SearchHelper, _validate_query,
                                        BLANK_QUERY, SEARCH_LIMIT)
 
 # Manually logging in for SearchHelper testing
-CREDENTIALS = {
-    "app_name": "SearchHelper_Client",
-    "services": ["search"]
-}
-SEARCH_CLIENT = mdf_toolbox.login(credentials=CREDENTIALS)["search"]
+SEARCH_CLIENT = mdf_toolbox.login(services=["search"], app_name="SearchHelper",
+                                  client_id="878721f5-6b92-411e-beac-830672c0f69a")["search"]
 INDEX = "mdf"
 
 # For purely historical reasons, internal-function tests create a SearchHelper
@@ -354,25 +349,6 @@ def check_field(res, field, regex):
     else:
         # No match
         return -1
-
-
-def test_logout():
-    # Credentials should exist
-    assert os.path.exists(os.path.join(mdf_toolbox.DEFAULT_CRED_PATH,
-                                       CREDENTIALS["app_name"]+"_tokens.json"))
-    # Copy credentials out
-    shutil.copytree(mdf_toolbox.DEFAULT_CRED_PATH, "temp_tokens")
-
-    try:
-        mdf_toolbox.logout()
-        assert not os.path.exists(os.path.join(mdf_toolbox.DEFAULT_CRED_PATH,
-                                               CREDENTIALS["app_name"]+"_tokens.json"))
-    # Always reset credentials
-    finally:
-        # Must delete token dir so copytree will copy correctly
-        shutil.rmtree(mdf_toolbox.DEFAULT_CRED_PATH)
-        shutil.copytree("temp_tokens", mdf_toolbox.DEFAULT_CRED_PATH)
-        shutil.rmtree("temp_tokens")
 
 
 def test_match_field():

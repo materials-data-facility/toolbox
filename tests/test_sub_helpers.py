@@ -4,8 +4,8 @@ import re
 import mdf_toolbox
 
 
-SEARCH_CLIENT = mdf_toolbox.login(credentials={"app_name": "MDF_Forge",
-                                               "services": ["search"]})["search"]
+SEARCH_CLIENT = mdf_toolbox.login(services=["search"], app_name="SearchHelper",
+                                  client_id="878721f5-6b92-411e-beac-830672c0f69a")["search"]
 INDEX = "mdf"
 SCROLL_FIELD = "mdf.scroll_id"
 

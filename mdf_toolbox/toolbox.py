@@ -1,12 +1,12 @@
 from collections.abc import Container, Iterable, Mapping
 from copy import deepcopy
 from datetime import datetime
-import errno
 import json
 import os
 import shutil
 import time
 
+from fair_research_login import NativeClient
 from globus_nexus_client import NexusClient
 import globus_sdk
 from globus_sdk.response import GlobusHTTPResponse
@@ -17,7 +17,6 @@ KNOWN_SCOPES = {
     "search": "urn:globus:auth:scope:search.api.globus.org:search",
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
     "data_mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
-    "connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
     "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
     "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups",
@@ -28,180 +27,86 @@ KNOWN_TOKEN_KEYS = {
     "search": "search.api.globus.org",
     "search_ingest": "search.api.globus.org",
     "data_mdf": "data.materialsdatafacility.org",
-    "connect": "mdf_dataset_submission",
     "mdf_connect": "mdf_dataset_submission",
     "petrel": "petrel_https_server",
     "groups": "nexus.api.globus.org",
     "dlhub": "dlhub_org"
 }
 KNOWN_CLIENTS = {
+    KNOWN_SCOPES["transfer"]: globus_sdk.TransferClient,
     "transfer": globus_sdk.TransferClient,
+    KNOWN_SCOPES["search"]: globus_sdk.SearchClient,
     "search": globus_sdk.SearchClient,
+    KNOWN_SCOPES["search_ingest"]: globus_sdk.SearchClient,
     "search_ingest": globus_sdk.SearchClient,
+    KNOWN_SCOPES["groups"]: NexusClient,
     "groups": NexusClient
 }
 SEARCH_INDEX_UUIDS = {
     "mdf": "1a57bbe5-5272-477f-9d31-343b8258b7a5",
     "mdf-test": "5acded0c-a534-45af-84be-dcf042e36412",
     "mdf-dev": "aeccc263-f083-45f5-ab1d-08ee702b3384",
-    "mdf-publish": "921907c6-4314-468b-a226-24edf5366cd9",
-    "mdf-publish-test": "05a5f8cc-e8cf-4ced-8426-d87cba7c0be3",
     "dlhub": "847c9105-18a0-4ffb-8a71-03dd76dfcc9d",
     "dlhub-test": "5c89e0a9-00e5-4171-b415-814fe4d0b8af"
 }
+DEFAULT_APP_NAME = "UNNAMED_APP"
+DEFAULT_CLIENT_ID = "984464e2-90ab-433d-8145-ac0215d26c8e"
 DEFAULT_INTERVAL = 1 * 60  # 1 minute, in seconds
 DEFAULT_INACTIVITY_TIME = 1 * 24 * 60 * 60  # 1 day, in seconds
 STD_TIMEOUT = 5 * 60  # 5 minutes
-DEFAULT_CRED_PATH = os.path.expanduser("~/.mdf/credentials")
 
 
 # *************************************************
 # * Authentication utilities
 # *************************************************
 
-def login(credentials=None, app_name=None, services=None, client_id=None, make_clients=True,
-          clear_old_tokens=False, token_dir=DEFAULT_CRED_PATH, **kwargs):
-    """Log in to Globus services
+def login(services, make_clients=True, clear_old_tokens=False, **kwargs):
+    """Log in to Globus services.
 
     Arguments:
-        credentials (str or dict): A string filename, string JSON, or dictionary
-                with credential and config information.
-                By default, looks in ``~/mdf/credentials/globus_login.json``.
-                Contains ``app_name``, ``services``, and ``client_id`` as described below.
-        app_name (str): Name of script/client. This will form the name of the token cache file.
-                **Default**: ``'UNKNOWN'``.
-        services (list of str): Services to authenticate with.
-                **Default**: ``[]``.
-        client_id (str): The ID of the client, given when registered with Globus.
-                **Default**: The MDF Native Clients ID.
+        services (list of str): The service names or scopes to authenticate to.
         make_clients (bool): If ``True``, will make and return appropriate clients with
                 generated tokens. If ``False``, will only return authorizers.
                 **Default**: ``True``.
-        clear_old_tokens (bool): If ``True``, delete old token file if it exists,
-                forcing user to re-login. If ``False``, use existing token file if there is one.
+        clear_old_tokens (bool): Force a login flow, even if loaded tokens are valid.
+                Same effect as ``force``. If one of these is ``True``, the effect triggers
                 **Default**: ``False``.
-        token_dir (str): The path to the directory to save tokens in and look for
-                credentials by default. **Default**: ``DEFAULT_CRED_PATH``.
+
+    Keyword Arguments:
+        app_name (str): Name of the app/script/client. Used for the named grant during consent,
+                and the local server browser page by default.
+                **Default**: ``'UNKNOWN_APP'``.
+        client_id (str): The ID of the client registered with Globus at
+                https://developers.globus.org
+                **Default**: The MDF Native Clients ID.
+        no_local_server (bool): Disable spinning up a local server to automatically
+                copy-paste the auth code. THIS IS REQUIRED if you are on a remote server.
+                When used locally with no_local_server=False, the domain is localhost with
+                a randomly chosen open port number.
+                **Default**: ``False``.
+        no_browser (bool): Do not automatically open the browser for the Globus Auth URL.
+                Display the URL instead and let the user navigate to that location manually.
+                **Default**: ``False``.
+        refresh_tokens (bool): Use Globus Refresh Tokens to extend login time.
+                **Default**: ``True``.
+        force (bool): Force a login flow, even if loaded tokens are valid.
+                Same effect as ``clear_old_tokens``. If one of these is ``True``, the effect
+                triggers. **Default**: ``False``.
 
     Returns:
         dict: The clients and authorizers requested, indexed by service name.
                 For example, if ``login()`` is told to auth with ``'search'``
                 then the search client will be in the ``'search'`` field.
-
-        Note:
-            Previously requested tokens (which are cached) will be returned alongside
-            explicitly requested ones.
     """
-    NATIVE_CLIENT_ID = "98bfc684-977f-4670-8669-71f8337688e4"
-    DEFAULT_CRED_FILENAME = "globus_login.json"
-
-    def _get_tokens(client, scopes, app_name, force_refresh=False):
-        token_path = os.path.join(token_dir, app_name + "_tokens.json")
-        if force_refresh:
-            if os.path.exists(token_path):
-                os.remove(token_path)
-        if os.path.exists(token_path):
-            with open(token_path, "r") as tf:
-                try:
-                    tokens = json.load(tf)
-                    # Check that requested scopes are present
-                    # :all scopes should override any scopes with lesser permissions
-                    # Some scopes are returned in multiples and should be separated
-                    existing_scopes = []
-                    for sc in [val["scope"] for val in tokens.values()]:
-                        if " " in sc:
-                            existing_scopes += sc.split(" ")
-                        else:
-                            existing_scopes.append(sc)
-                    permissive_scopes = [scope.replace(":all", "")
-                                         for scope in existing_scopes
-                                         if scope.endswith(":all")]
-                    missing_scopes = [scope for scope in scopes.split(" ")
-                                      if scope not in existing_scopes
-                                      and not any([scope.startswith(per_sc)
-                                                   for per_sc in permissive_scopes])
-                                      and not scope.strip() == ""]
-                    # If some scopes are missing, regenerate tokens
-                    # Get tokens for existing scopes and new scopes
-                    if len(missing_scopes) > 0:
-                        scopes = " ".join(existing_scopes + missing_scopes)
-                        os.remove(token_path)
-                except ValueError:
-                    # Tokens corrupted
-                    os.remove(token_path)
-        if not os.path.exists(token_path):
-            try:
-                os.makedirs(token_dir)
-            except (IOError, OSError):
-                pass
-            client.oauth2_start_flow(requested_scopes=scopes, refresh_tokens=True)
-            authorize_url = client.oauth2_get_authorize_url()
-
-            print("It looks like this is the first time you're accessing this service.",
-                  "\nPlease log in to Globus at this link:\n", authorize_url)
-            auth_code = input("Copy and paste the authorization code here: ").strip()
-
-            # Handle 401s
-            try:
-                token_response = client.oauth2_exchange_code_for_tokens(auth_code)
-            except globus_sdk.GlobusAPIError as e:
-                if e.http_status == 401:
-                    raise ValueError("\nSorry, that code isn't valid."
-                                     " You can try again, or contact support.")
-                else:
-                    raise
-            tokens = token_response.by_resource_server
-
-            os.umask(0o077)
-            with open(token_path, "w") as tf:
-                json.dump(tokens, tf)
-            print("Thanks! You're now logged in.")
-
-        return tokens
-
-    # If creds supplied in 'credentials', process
-    if credentials:
-        if type(credentials) is str:
-            try:
-                with open(credentials) as cred_file:
-                    creds = json.load(cred_file)
-            except IOError:
-                try:
-                    creds = json.loads(credentials)
-                except ValueError:
-                    raise ValueError("Credential string unreadable")
-        elif type(credentials) is dict:
-            creds = credentials
-        else:
-            try:
-                with open(os.path.join(os.getcwd(), DEFAULT_CRED_FILENAME)) as cred_file:
-                    creds = json.load(cred_file)
-            except IOError:
-                try:
-                    with open(os.path.join(token_dir, DEFAULT_CRED_FILENAME)) as cred_file:
-                        creds = json.load(cred_file)
-                except IOError:
-                    raise ValueError("Credentials/configuration must be passed as a "
-                                     + "filename string, JSON string, or dictionary, "
-                                     + "or provided in '"
-                                     + DEFAULT_CRED_FILENAME
-                                     + "' or '"
-                                     + token_dir
-                                     + "'.")
-        app_name = creds.get("app_name")
-        services = creds.get("services", services)
-        client_id = creds.get("client_id")
-    if not app_name:
-        app_name = "UNKNOWN"
-    if not services:
-        services = []
-    elif isinstance(services, str):
+    if isinstance(services, str):
         services = [services]
-    if not client_id:
-        client_id = NATIVE_CLIENT_ID
+    # Set up arg defaults
+    app_name = kwargs.get("app_name") or DEFAULT_APP_NAME
+    client_id = kwargs.get("client_id") or DEFAULT_CLIENT_ID
 
-    native_client = globus_sdk.NativeAppAuthClient(client_id, app_name=app_name)
+    native_client = NativeClient(client_id=client_id, app_name=app_name)
 
+    # Translate known services into scopes, existing scopes are cleaned
     servs = []
     for serv in services:
         serv = serv.lower().strip()
@@ -209,107 +114,55 @@ def login(credentials=None, app_name=None, services=None, client_id=None, make_c
             servs += serv.split(" ")
         else:
             servs += list(serv)
-    # Translate services into scopes as possible
-    scopes = " ".join([KNOWN_SCOPES.get(sc, sc) for sc in servs])
+    scopes = [KNOWN_SCOPES.get(sc, sc) for sc in servs]
 
-    all_tokens = _get_tokens(native_client, scopes, app_name, force_refresh=clear_old_tokens)
+    native_client.login(requested_scopes=scopes,
+                        no_local_server=kwargs.get("no_local_server", False),
+                        no_browser=kwargs.get("no_browser", False),
+                        refresh_tokens=kwargs.get("refresh_tokens", True),
+                        force=clear_old_tokens or kwargs.get("force", False))
 
-    # Make authorizers with every returned token
-    all_authorizers = {}
-    for key, tokens in all_tokens.items():
-        # TODO: Allow non-Refresh authorizers
-        try:
-            all_authorizers[key] = globus_sdk.RefreshTokenAuthorizer(tokens["refresh_token"],
-                                                                     native_client)
-        except KeyError:
-            print("Error: Unable to retrieve tokens for '{}'.\n"
-                  "You may need to delete your old tokens and retry.".format(key))
+    all_authorizers = native_client.get_authorizers_by_scope(requested_scopes=scopes)
     returnables = {}
-    # Populate clients and named services
-    # Only translate back services - if user provides scope directly, don't translate back
-    # ex. transfer => urn:transfer.globus.org:all => transfer,
-    #     but urn:transfer.globus.org:all !=> transfer
-    for service in servs:
-        token_key = KNOWN_TOKEN_KEYS.get(service)
-        # If the .by_resource_server key (token key) for the service was returned
-        if token_key in all_authorizers.keys():
-            # If there is an applicable client (all clients have known token key)
-            # Pop from all_authorizers to remove from final return value
-            if make_clients and KNOWN_CLIENTS.get(service):
-                try:
-                    returnables[service] = KNOWN_CLIENTS[service](
-                                                authorizer=all_authorizers.pop(token_key),
-                                                http_timeout=STD_TIMEOUT)
-                except globus_sdk.GlobusAPIError as e:
-                    print("Error: Unable to create {} client: {}".format(service, e.message))
-            # If no applicable client, just translate the key
-            else:
-                returnables[service] = all_authorizers.pop(token_key)
-    # Add authorizers not associated with service to returnables
-    returnables.update(all_authorizers)
+    # Process authorizers (rename keys to originals, make clients)
+    for scope, auth in all_authorizers.items():
+        # User specified known_scope name and not scope directly
+        if scope not in servs:
+            try:
+                key = [k for k, v in KNOWN_SCOPES.items() if scope == v][0]
+            except IndexError:  # Not a known scope(?), fallback to scope as key
+                key = scope
+        # User specified scope directly
+        else:
+            key = scope
+
+        # User wants clients and client supported
+        if make_clients and scope in KNOWN_CLIENTS.keys():
+            returnables[key] = KNOWN_CLIENTS[scope](authorizer=auth, http_timeout=STD_TIMEOUT)
+        # Returning authorizer only
+        else:
+            returnables[key] = auth
 
     return returnables
 
 
-def confidential_login(credentials=None, client_id=None, client_secret=None, services=None,
-                       make_clients=True, token_dir=DEFAULT_CRED_PATH):
+def confidential_login(services, client_id, client_secret, make_clients=True):
     """Log in to Globus services as a confidential client
-    (a client with its own login information).
+    (a client with its own login information, i.e. NOT a human's account).
 
     Arguments:
-        credentials (str or dict): A string filename, string JSON, or dictionary
-                with credential and config information.
-                By default, uses the ``DEFAULT_CRED_FILENAME`` and token_dir.
-                Contains ``client_id``, ``client_secret``, and ``services`` as defined below.
+        services (list of str): Services to authenticate with.
         client_id (str): The ID of the client.
         client_secret (str): The client's secret for authentication.
-        services (list of str): Services to authenticate with.
         make_clients (bool): If ``True``, will make and return appropriate clients
                 with generated tokens.
                 If ``False``, will only return authorizers.
                 **Default**: ``True``.
-        token_dir (str): The path to the directory to save tokens in and look for
-                credentials by default.
-                **Default**: ``DEFAULT_CRED_PATH``.
 
     Returns:
         dict: The clients and authorizers requested, indexed by service name.
     """
-    DEFAULT_CRED_FILENAME = "confidential_globus_login.json"
-    # Read credentials if supplied
-    if credentials:
-        if type(credentials) is str:
-            try:
-                with open(credentials) as cred_file:
-                    creds = json.load(cred_file)
-            except IOError:
-                try:
-                    creds = json.loads(credentials)
-                except ValueError:
-                    raise ValueError("Credentials unreadable or missing")
-        elif type(credentials) is dict:
-            creds = credentials
-        else:
-            try:
-                with open(os.path.join(os.getcwd(), DEFAULT_CRED_FILENAME)) as cred_file:
-                    creds = json.load(cred_file)
-            except IOError:
-                try:
-                    with open(os.path.join(token_dir, DEFAULT_CRED_FILENAME)) as cred_file:
-                        creds = json.load(cred_file)
-                except IOError:
-                    raise ValueError("Credentials/configuration must be passed as a "
-                                     "filename string, JSON string, or dictionary, or provided "
-                                     "in '{}' or '{}'.".format(DEFAULT_CRED_FILENAME,
-                                                               token_dir))
-        client_id = creds.get("client_id")
-        client_secret = creds.get("client_secret")
-        services = creds.get("services", services)
-    if not client_id or not client_secret:
-        raise ValueError("A client_id and client_secret are required.")
-    if not services:
-        services = []
-    elif isinstance(services, str):
+    if isinstance(services, str):
         services = [services]
 
     conf_client = globus_sdk.ConfidentialAppAuthClient(client_id, client_secret)
@@ -323,7 +176,7 @@ def confidential_login(credentials=None, client_id=None, client_secret=None, ser
     # Translate services into scopes as possible
     scopes = [KNOWN_SCOPES.get(sc, sc) for sc in servs]
 
-    # Make authorizers with every returned token
+    # Make authorizers for each scope requested
     all_authorizers = {}
     for scope in scopes:
         # TODO: Allow non-CC authorizers?
@@ -331,35 +184,32 @@ def confidential_login(credentials=None, client_id=None, client_secret=None, ser
             all_authorizers[scope] = globus_sdk.ClientCredentialsAuthorizer(conf_client, scope)
         except Exception as e:
             print("Error: Cannot create authorizer for scope '{}' ({})".format(scope, str(e)))
+
     returnables = {}
-    # Populate clients and named services
-    # Only translate back services - if user provides scope directly, don't translate back
-    # ex. transfer => urn:transfer.globus.org:all => transfer,
-    #     but urn:transfer.globus.org:all !=> transfer
-    for service in servs:
-        token_key = KNOWN_SCOPES.get(service)
-        # If the .by_resource_server key (token key) for the service was returned
-        if token_key in all_authorizers.keys():
-            # If there is an applicable client (all clients have known token key)
-            # Pop from all_authorizers to remove from final return value
-            if make_clients and KNOWN_CLIENTS.get(service):
-                try:
-                    returnables[service] = KNOWN_CLIENTS[service](
-                                                authorizer=all_authorizers.pop(token_key),
-                                                http_timeout=STD_TIMEOUT)
-                except globus_sdk.GlobusAPIError as e:
-                    print("Error: Unable to create {} client: {}".format(service, e.message))
-            # If no applicable client, just translate the key
-            else:
-                returnables[service] = all_authorizers.pop(token_key)
-    # Add authorizers not associated with service to returnables
-    returnables.update(all_authorizers)
+    # Process authorizers (rename keys to originals, make clients)
+    for scope, auth in all_authorizers.items():
+        # User specified known_scope name and not scope directly
+        if scope not in servs:
+            try:
+                key = [k for k, v in KNOWN_SCOPES.items() if scope == v][0]
+            except IndexError:  # Not a known scope(?), fallback to scope as key
+                key = scope
+        # User specified scope directly
+        else:
+            key = scope
+
+        # User wants clients and client supported
+        if make_clients and scope in KNOWN_CLIENTS.keys():
+            returnables[key] = KNOWN_CLIENTS[scope](authorizer=auth, http_timeout=STD_TIMEOUT)
+        # Returning authorizer only
+        else:
+            returnables[key] = auth
 
     return returnables
 
 
 def anonymous_login(services):
-    """Initialize services without authenticating to Globus Auth.
+    """Initialize service clients without authenticating to Globus Auth.
 
     Note:
         Clients may have reduced functionality without authentication.
@@ -387,25 +237,20 @@ def anonymous_login(services):
     return clients
 
 
-def logout(token_dir=DEFAULT_CRED_PATH):
-    """Remove ALL tokens in the token directory.
-    This will force re-authentication to all services.
+def logout(app_name=None, client_id=None):
+    """Revoke and delete all saved tokens for the app.
 
     Arguments:
-        token_dir (str): The path to the directory to save tokens in and look for
-                credentials by default. If this argument was given to a ``login()`` function,
-                the same value must be given here to properly logout.
-                **Default**: ``DEFAULT_CRED_PATH``.
+        app_name (str): Name of the app/script/client.
+                **Default**: ``'UNKNOWN_APP'``.
+        client_id (str): The ID of the client.
+                **Default**: The MDF Native Clients ID.
     """
-    for f in os.listdir(token_dir):
-        if f.endswith("tokens.json"):
-            try:
-                os.remove(os.path.join(token_dir, f))
-            except OSError as e:
-                # Eat ENOENT (no such file/dir, tokens already deleted) only,
-                # raise any other issue (bad permissions, etc.)
-                if e.errno != errno.ENOENT:
-                    raise
+    if not app_name:
+        app_name = DEFAULT_APP_NAME
+    if not client_id:
+        client_id = DEFAULT_CLIENT_ID
+    NativeClient(app_name=app_name, client_id=client_id).logout()
 
 
 # *************************************************
