@@ -771,7 +771,7 @@ def get_local_ep(*args, **kwargs):
 
 
 # *************************************************
-# * Misc utilities
+# * JSON/JSONSchema/dict utilities
 # *************************************************
 
 def dict_merge(base, addition, append_lists=False):
@@ -1186,3 +1186,103 @@ def prettify_json(root, **kwargs):
     # Just yield item
     else:
         yield "{}{}{}".format(indent*_nest_level, bullet, root)
+
+
+def translate_json(source_doc, mapping, na_values=None):
+    """Translate a JSON document (as a dictionary) from one schema to another.
+
+    Warning:
+            This tool is unable to handle translation involving data inside lists/arrays.
+            If a list/array must be read for the translation, it will be ignored.
+            (Ex. ``"some_array.0.my_field"`` where 0 is an index, is not supported.)
+            However, lists/arrays as values are supported.
+
+    Arguments:
+        source_doc (dict): The source JSON document to translate.
+        mapping (dict): The mapping of destination_fields: source_fields, in
+                dot notation (where nested dicts/JSON objects are represented with a period).
+                Missing fields are ignored.
+
+                Examples::
+
+                    {
+                        "new_schema.some_field": "old_schema.stuff.old_fieldname"
+                    }
+                    {
+                        "new_doc.organized.new_fieldname": "old.disordered.vaguename"
+                    }
+        na_values (list): Values to treat as N/A (not applicable/available).
+                N/A values will be ignored and not copied.
+                **Default:** ``None`` (no N/A values).
+
+    Returns:
+        dict: The translated JSON document.
+    """
+    if na_values is None:
+        na_values = []
+    elif not isinstance(na_values, list):
+        na_values = [na_values]
+
+    # Get (path, value) pairs from the key structure
+    # Loop over each
+    dest_doc = {}
+    for dest_path, source_path in flatten_dict(mapping).items():
+        try:
+            # Get the value in the data pointed to by the source_path
+            # Raises KeyError if value not found
+            value = source_doc
+            for field in source_path.split("."):
+                value = value[field]
+            # Check that value is valid to translate
+            if value not in na_values:
+                fields = dest_path.split(".")
+                last_field = fields.pop()
+                current_field = dest_doc
+                # Create all missing fields
+                for field in fields:
+                    if current_field.get(field) is None:
+                        current_field[field] = {}
+                    current_field = current_field[field]
+                # Add value to end
+                current_field[last_field] = value
+        # KeyError just means not found; don't process, don't panic
+        except KeyError:
+            pass
+
+    return dest_doc
+
+
+def flatten_dict(unflat_dict):
+    """Flatten a dictionary into dot notation, where nested dicts are represented with a period.
+
+    Caution:
+            This tool does not flatten lists. Lists are treated as though they are
+            already fully flattened, i.e. they are already leaf nodes in the dict tree.
+
+    Arguments:
+        unflat_dict (dict): The dictionary to flatten.
+
+    Returns:
+        dict: The dictionary, flattened into dot notation.
+
+    Example::
+
+        {
+            "key1": {
+                "key2": "value"
+            }
+        }
+        turns into
+        {
+            "key1.key2": value
+        }
+    """
+    flat_dict = {}
+    for key, val in unflat_dict.items():
+        if isinstance(val, dict):
+            flat_subdict = flatten_dict(val)
+            for subkey, subval in flat_subdict.items():
+                flat_dict[key+"."+subkey] = subval
+        else:
+            flat_dict[key] = val
+    return flat_dict
