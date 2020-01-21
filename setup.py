@@ -1,8 +1,16 @@
+import os
 from setuptools import setup
+
+# Single source of truth for version
+version_ns = {}
+with open(os.path.join("mdf_toolbox", "version.py")) as f:
+    exec(f.read(), version_ns)
+version = version_ns['__version__']
 
 setup(
     name='mdf_toolbox',
-    version='0.5.0',
+    version=version,
+    #version='0.5.0',
     packages=['mdf_toolbox'],
     description='Materials Data Facility Python utilities',
     long_description=("Toolbox is the Materials Data Facility Python package"
