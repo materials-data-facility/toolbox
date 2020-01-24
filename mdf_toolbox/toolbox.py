@@ -1021,6 +1021,45 @@ def expand_jsonschema(schema, base_path, definitions=None):
     return schema
 
 
+def condense_jsonschema(schema, include_containers=True, list_items=True):
+    """Condense a JSONSchema into a dict of dot-notated data fields and data types.
+    This strips out all of the JSONSchema directives, like ``required`` and
+    ``additionalProperties``, leaving only the fields that could actually be found in valid data.
+
+    Caution:
+        This tool is not exhaustive, and will not work correctly on all JSONSchemas.
+        In particular, schemas with objects nested in arrays will not be handled correctly,
+        and data fields that do not have a listed ``type`` will be skipped.
+        Additionally, ``$ref`` elements WILL NOT be expanded. Use ``expand_jsonschema()`` on your
+        schema first if you want references expanded.
+
+    Arguments:
+        schema (dict): The JSONSchema to condense. ``$ref`` elements will not be expanded.
+        include_containers (bool): Should containers (dicts/objects, lists/arrays) be listed
+                separately from their fields?
+                **Default**: ``True``, which will list containers.
+        list_items (bool): Should the field ``items`` be included in the data fields?
+                ``items`` denotes an array of things, and it not directly a data field,
+                but the output can be confusing without it.
+                **Default**: ``True``.
+
+    Returns:
+        dict: The list of data fields, in dot notation, and the associated data type
+                (when specified), as `data_field: data_type`.
+    """
+    data_fields = {}
+    for field, value in flatten_dict(schema).items():
+        # TODO: Make this logic more robust (and less hacky).
+        #       Generally works for MDF purposes; will explode on complex JSONSchemas.
+        if field.endswith("type") and (include_containers
+                                       or (value != "object" and value != "array")):
+            clean_field = field.replace("properties.", "").replace(".type", "")
+            if not list_items:
+                clean_field = clean_field.replace(".items", "")
+            data_fields[clean_field] = str(value)
+    return data_fields
+
+
 def prettify_jsonschema(root, **kwargs):
     """Prettify a JSONSchema. Pretty-yield instead of pretty-print.
 
