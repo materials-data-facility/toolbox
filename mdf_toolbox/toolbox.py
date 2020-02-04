@@ -338,6 +338,8 @@ def format_gmeta(data, acl=None, identifier=None):
     """Format input into GMeta format, suitable for ingesting into Globus Search.
     Formats a dictionary into a GMetaEntry.
     Formats a list of GMetaEntry into a GMetaList inside a GMetaIngest.
+    The data suppied is copied with ``copy.deepcopy()`` so the original objects
+    may be reused or deleted as needed.
 
     **Example usage**::
 
@@ -384,22 +386,27 @@ def format_gmeta(data, acl=None, identifier=None):
         return {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": identifier,
+            "subject": deepcopy(identifier),
             "visible_to": prefixed_acl,
-            "content": data
-            }
+            "content": deepcopy(data)
+        }
 
     elif isinstance(data, list):
+        # No known versions other than "2016-11-09"
+        try:
+            version = deepcopy(data[0]["@version"])
+        except Exception:
+            version = "2016-11-09"
         return {
             "@datatype": "GIngest",
-            "@version": "2016-11-09",
+            "@version": version,
             "ingest_type": "GMetaList",
             "ingest_data": {
                 "@datatype": "GMetaList",
-                "@version": "2016-11-09",
-                "gmeta": data
-                }
+                "@version": version,
+                "gmeta": deepcopy(data)
             }
+        }
 
     else:
         raise TypeError("Cannot format '" + str(type(data)) + "' into GMeta.")
@@ -771,7 +778,7 @@ def get_local_ep(*args, **kwargs):
 
 
 # *************************************************
-# * Misc utilities
+# * JSON/JSONSchema/dict utilities
 # *************************************************
 
 def dict_merge(base, addition, append_lists=False):
@@ -1021,6 +1028,45 @@ def expand_jsonschema(schema, base_path, definitions=None):
     return schema
 
 
+def condense_jsonschema(schema, include_containers=True, list_items=True):
+    """Condense a JSONSchema into a dict of dot-notated data fields and data types.
+    This strips out all of the JSONSchema directives, like ``required`` and
+    ``additionalProperties``, leaving only the fields that could actually be found in valid data.
+
+    Caution:
+        This tool is not exhaustive, and will not work correctly on all JSONSchemas.
+        In particular, schemas with objects nested in arrays will not be handled correctly,
+        and data fields that do not have a listed ``type`` will be skipped.
+        Additionally, ``$ref`` elements WILL NOT be expanded. Use ``expand_jsonschema()`` on your
+        schema first if you want references expanded.
+
+    Arguments:
+        schema (dict): The JSONSchema to condense. ``$ref`` elements will not be expanded.
+        include_containers (bool): Should containers (dicts/objects, lists/arrays) be listed
+                separately from their fields?
+                **Default**: ``True``, which will list containers.
+        list_items (bool): Should the field ``items`` be included in the data fields?
+                ``items`` denotes an array of things, and it not directly a data field,
+                but the output can be confusing without it.
+                **Default**: ``True``.
+
+    Returns:
+        dict: The list of data fields, in dot notation, and the associated data type
+                (when specified), as `data_field: data_type`.
+    """
+    data_fields = {}
+    for field, value in flatten_dict(schema).items():
+        # TODO: Make this logic more robust (and less hacky).
+        #       Generally works for MDF purposes; will explode on complex JSONSchemas.
+        if field.endswith("type") and (include_containers
+                                       or (value != "object" and value != "array")):
+            clean_field = field.replace("properties.", "").replace(".type", "")
+            if not list_items:
+                clean_field = clean_field.replace(".items", "")
+            data_fields[clean_field] = str(value)
+    return data_fields
+
+
 def prettify_jsonschema(root, **kwargs):
     """Prettify a JSONSchema. Pretty-yield instead of pretty-print.
 
@@ -1186,3 +1232,103 @@ def prettify_json(root, **kwargs):
     # Just yield item
     else:
         yield "{}{}{}".format(indent*_nest_level, bullet, root)
+
+
+def translate_json(source_doc, mapping, na_values=None):
+    """Translate a JSON document (as a dictionary) from one schema to another.
+
+    Warning:
+            This tool is unable to handle translation involving data inside lists/arrays.
+            If a list/array must be read for the translation, it will be ignored.
+            (Ex. ``"some_array.0.my_field"`` where 0 is an index, is not supported.)
+            However, lists/arrays as values are supported.
+
+    Arguments:
+        source_doc (dict): The source JSON document to translate.
+        mapping (dict): The mapping of destination_fields: source_fields, in
+                dot notation (where nested dicts/JSON objects are represented with a period).
+                Missing fields are ignored.
+
+                Examples::
+
+                    {
+                        "new_schema.some_field": "old_schema.stuff.old_fieldname"
+                    }
+                    {
+                        "new_doc.organized.new_fieldname": "old.disordered.vaguename"
+                    }
+        na_values (list): Values to treat as N/A (not applicable/available).
+                N/A values will be ignored and not copied.
+                **Default:** ``None`` (no N/A values).
+
+    Returns:
+        dict: The translated JSON document.
+    """
+    if na_values is None:
+        na_values = []
+    elif not isinstance(na_values, list):
+        na_values = [na_values]
+
+    # Get (path, value) pairs from the key structure
+    # Loop over each
+    dest_doc = {}
+    for dest_path, source_path in flatten_dict(mapping).items():
+        try:
+            # Get the value in the data pointed to by the source_path
+            # Raises KeyError if value not found
+            value = source_doc
+            for field in source_path.split("."):
+                value = value[field]
+            # Check that value is valid to translate
+            if value not in na_values:
+                fields = dest_path.split(".")
+                last_field = fields.pop()
+                current_field = dest_doc
+                # Create all missing fields
+                for field in fields:
+                    if current_field.get(field) is None:
+                        current_field[field] = {}
+                    current_field = current_field[field]
+                # Add value to end
+                current_field[last_field] = value
+        # KeyError just means not found; don't process, don't panic
+        except KeyError:
+            pass
+
+    return dest_doc
+
+
+def flatten_dict(unflat_dict):
+    """Flatten a dictionary into dot notation, where nested dicts are represented with a period.
+
+    Caution:
+            This tool does not flatten lists. Lists are treated as though they are
+            already fully flattened, i.e. they are already leaf nodes in the dict tree.
+
+    Arguments:
+        unflat_dict (dict): The dictionary to flatten.
+
+    Returns:
+        dict: The dictionary, flattened into dot notation.
+
+    Example::
+
+        {
+            "key1": {
+                "key2": "value"
+            }
+        }
+        turns into
+        {
+            "key1.key2": value
+        }
+    """
+    flat_dict = {}
+    for key, val in unflat_dict.items():
+        if isinstance(val, dict):
+            flat_subdict = flatten_dict(val)
+            for subkey, subval in flat_subdict.items():
+                flat_dict[key+"."+subkey] = subval
+        else:
+            flat_dict[key] = val
+    return flat_dict

@@ -3,3 +3,4 @@
 from .toolbox import *  # noqa: F401,F403
 from .search_helper import SearchHelper  # noqa: F401
 from .sub_helpers import *  # noqa: F401,F403
+from .version import __version__   # noqa: F401

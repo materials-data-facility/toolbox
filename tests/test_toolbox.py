@@ -483,3 +483,88 @@ def test_insensitive_comparison():
     assert mdf_toolbox.insensitive_comparison(dbase, d6) is False
     assert mdf_toolbox.insensitive_comparison(dbase, d6, string_insensitive=True,
                                               type_insensitive=True) is False
+
+
+def test_translate_json():
+    # Set up test dicts
+    source_doc = {
+        "dict1": {
+            "field1": "value1",
+            "field2": 2
+        },
+        "dict2": {
+            "nested1": {
+                "field1": True,
+                "field3": "value3"
+            }
+        },
+        "compost": "CN25",
+        "na_val": "na"
+    }
+    mapping1 = {
+        "custom": {
+            "foo": "dict1.field1",
+            "bar": "dict2.nested1.field1",
+            "missing": "na_val"
+        },
+        "material": {
+            "composition": "compost"
+        }
+    }
+    mapping2 = {
+        "custom.foo": "dict1.field1",
+        "custom.bar": "dict2.nested1.field1",
+        "custom.missing": "na_val",
+        "material.composition": "compost"
+    }
+    correct_output = {
+        "material": {
+            "composition": "CN25"
+        },
+        "custom": {
+            "foo": "value1",
+            "bar": True,
+            "missing": "na"
+        }
+    }
+    no_na_output = {
+        "material": {
+            "composition": "CN25"
+        },
+        "custom": {
+            "foo": "value1",
+            "bar": True
+        }
+    }
+
+    assert mdf_toolbox.translate_json(source_doc, mapping1) == correct_output
+    assert mdf_toolbox.translate_json(source_doc, mapping2) == correct_output
+    assert mdf_toolbox.translate_json(source_doc, mapping1, ["abcd"]) == correct_output
+    assert mdf_toolbox.translate_json(source_doc, mapping1, ["na"]) == no_na_output
+    assert mdf_toolbox.translate_json(source_doc, mapping1, "na") == no_na_output
+
+
+def test_flatten_dict():
+    unflat_dict = {
+        "key1": {
+            "key2": {
+                "key3": {
+                    "key4": "value1"
+                },
+                "key5": "value2"
+            },
+            "key6": {
+                "key7": 555,
+                "key8": [1, {"key_not_flattened": "foo"}, "b"]
+            }
+        },
+        "key9": "value3"
+    }
+    flat_dict = {
+        "key1.key2.key3.key4": "value1",
+        "key1.key2.key5": "value2",
+        "key1.key6.key7": 555,
+        "key1.key6.key8": [1, {"key_not_flattened": "foo"}, "b"],
+        "key9": "value3"
+    }
+    assert mdf_toolbox.flatten_dict(unflat_dict) == flat_dict
