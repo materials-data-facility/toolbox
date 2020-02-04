@@ -338,6 +338,8 @@ def format_gmeta(data, acl=None, identifier=None):
     """Format input into GMeta format, suitable for ingesting into Globus Search.
     Formats a dictionary into a GMetaEntry.
     Formats a list of GMetaEntry into a GMetaList inside a GMetaIngest.
+    The data suppied is copied with ``copy.deepcopy()`` so the original objects
+    may be reused or deleted as needed.
 
     **Example usage**::
 
@@ -384,22 +386,27 @@ def format_gmeta(data, acl=None, identifier=None):
         return {
             "@datatype": "GMetaEntry",
             "@version": "2016-11-09",
-            "subject": identifier,
+            "subject": deepcopy(identifier),
             "visible_to": prefixed_acl,
-            "content": data
-            }
+            "content": deepcopy(data)
+        }
 
     elif isinstance(data, list):
+        # No known versions other than "2016-11-09"
+        try:
+            version = deepcopy(data[0]["@version"])
+        except Exception:
+            version = "2016-11-09"
         return {
             "@datatype": "GIngest",
-            "@version": "2016-11-09",
+            "@version": version,
             "ingest_type": "GMetaList",
             "ingest_data": {
                 "@datatype": "GMetaList",
-                "@version": "2016-11-09",
-                "gmeta": data
-                }
+                "@version": version,
+                "gmeta": deepcopy(data)
             }
+        }
 
     else:
         raise TypeError("Cannot format '" + str(type(data)) + "' into GMeta.")
