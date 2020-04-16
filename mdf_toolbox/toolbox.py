@@ -10,6 +10,7 @@ from fair_research_login import NativeClient
 from globus_nexus_client import NexusClient
 import globus_sdk
 from globus_sdk.response import GlobusHTTPResponse
+import jsonschema
 
 
 KNOWN_SCOPES = {
@@ -969,32 +970,47 @@ def insensitive_comparison(item1, item2, type_insensitive=False, string_insensit
         return item1 == item2
 
 
-def expand_jsonschema(schema, base_path, definitions=None):
-    """Expand the local references in a JSONSchema and return the dereferenced schema.
+def expand_jsonschema(schema, base_uri=None, definitions=None, resolver=None):
+    """Expand references in a JSONSchema and return the dereferenced schema.
     Note:
-        This function only dereferences simple local ``$ref`` values. It does not
-        dereference ``$ref`` values that point to nonlocal resources (HTTP links, etc.),
-        or are sufficiently complex. This tool is not exhaustive.
+        This function only dereferences simple ``$ref`` values. It does not
+        dereference ``$ref`` values that are sufficiently complex.
+        This tool is not exhaustive for all valid JSONSchemas.
 
     Arguments:
         schema (dict): The JSONSchema to dereference.
-        base_path (str): The path to the local schema files.
+        base_uri (str): The base URI to the schema files, or a local path to the schema files.
+                Required if ``resolver`` is not supplied (``base_uri`` is preferable).
         definitions (dict): Referenced definitions to start. Fully optional.
                 **Default:** ``None``, to automatically populate definitions.
+        resolver (jsonschema.RefResolver): The RefResolver to use in resolving ``$ref``
+                values. Generally should not be set by users.
+                **Default:** ``None``.
 
     Returns:
         dict: The dereferenced schema.
     """
-    if definitions is None:
-        definitions = {}
-
     if not isinstance(schema, dict):
         return schema  # No-op on non-dict
+
+    if resolver is None and base_uri is None:
+        raise ValueError("base_uri is a required argument.")
+    # Create RefResolver
+    elif resolver is None:
+        if os.path.exists(base_uri):
+            base_uri = "{}{}{}".format(
+                                    "file://" if not base_uri.startswith("file://") else "",
+                                    os.path.abspath(base_uri),
+                                    "/" if base_uri.endswith("/") else "")
+        resolver = jsonschema.RefResolver(base_uri, None)
+
+    if definitions is None:
+        definitions = {}
     # Save schema's definitions
     # Could results in duplicate definitions, which has no effect
     if schema.get("definitions"):
         definitions = dict_merge(schema["definitions"], definitions)
-        definitions = expand_jsonschema(definitions, base_path, definitions)
+        definitions = expand_jsonschema(definitions, definitions=definitions, resolver=resolver)
     while "$ref" in json.dumps(schema):
         new_schema = {}
         for key, val in schema.items():
@@ -1003,13 +1019,16 @@ def expand_jsonschema(schema, base_path, definitions=None):
                 # other keys present, so we can make new_schema exactly the $ref value
                 filename, intra_path = val.split("#")
                 intra_parts = [x for x in intra_path.split("/") if x]
-                # Filename ref refers to external file - load and add in
+                # Filename ref refers to external file - resolve with RefResolver
                 if filename:
+                    ref_schema = resolver.resolve(filename)[1]
+                    '''
                     with open(os.path.join(base_path, filename)) as schema_file:
                         ref_schema = json.load(schema_file)
+                    '''
                     if ref_schema.get("definitions"):
                         definitions = dict_merge(ref_schema["definitions"], definitions)
-                        definitions = expand_jsonschema(definitions, base_path, definitions)
+                        definitions = expand_jsonschema(definitions, base_uri, definitions)
                     for path_part in intra_parts:
                         ref_schema = ref_schema[path_part]
                     # new_schema[intra_parts[-1]] = ref_schema
@@ -1023,7 +1042,8 @@ def expand_jsonschema(schema, base_path, definitions=None):
                     if new_schema is None:
                         raise ValueError("Definition missing: {}".format(intra_parts))
             else:
-                new_schema[key] = expand_jsonschema(val, base_path, definitions)
+                new_schema[key] = expand_jsonschema(val, definitions=definitions,
+                                                    resolver=resolver)
         schema = new_schema
     return schema
 
