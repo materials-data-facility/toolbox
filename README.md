@@ -5,7 +5,6 @@
 
 Toolbox is a collection of the Materials Data Facility tools and utilities.
 
-Jupyter notebook tutorials for using the MDF Toolbox, including the MDFConnectClient, can be found in docs/tutorials.
 
 # Installation
 
@@ -21,7 +20,8 @@ pip install -e .
 ```
 
 # Documentation and examples
-Tutorials can be found in the `docs` directory. The Jupyter notebooks can be viewed on GitHub or run interactively with [Jupyter](http://jupyter.org/install).
+Documentation can be found on [Read the Docs](https://mdf-toolbox.readthedocs.io/en/master/).
+Tutorials can also be found in the `docs` directory. The Jupyter notebooks can be viewed on Read the Docs or GitHub, or run interactively with [Jupyter](http://jupyter.org/install).
 
 # Requirements
 * Toolbox requires Python 3.5 or greater.
