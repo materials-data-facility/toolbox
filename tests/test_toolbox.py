@@ -544,7 +544,7 @@ def test_translate_json():
     assert mdf_toolbox.translate_json(source_doc, mapping1, "na") == no_na_output
 
 
-def test_flatten_dict():
+def test_flatten_json():
     unflat_dict = {
         "key1": {
             "key2": {
@@ -555,7 +555,7 @@ def test_flatten_dict():
             },
             "key6": {
                 "key7": 555,
-                "key8": [1, {"key_not_flattened": "foo"}, "b"]
+                "key8": [1, {"list_flattened": "foo"}, "b"]
             }
         },
         "key9": "value3"
@@ -564,7 +564,8 @@ def test_flatten_dict():
         "key1.key2.key3.key4": "value1",
         "key1.key2.key5": "value2",
         "key1.key6.key7": 555,
-        "key1.key6.key8": [1, {"key_not_flattened": "foo"}, "b"],
+        "key1.key6.key8": [1, "b"],
+        "key1.key6.key8.list_flattened": "foo",
         "key9": "value3"
     }
-    assert mdf_toolbox.flatten_dict(unflat_dict) == flat_dict
+    assert mdf_toolbox.flatten_json(unflat_dict) == flat_dict
