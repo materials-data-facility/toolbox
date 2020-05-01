@@ -1075,7 +1075,7 @@ def condense_jsonschema(schema, include_containers=True, list_items=True):
                 (when specified), as `data_field: data_type`.
     """
     data_fields = {}
-    for field, value in flatten_dict(schema).items():
+    for field, value in flatten_json(schema, True).items():
         # TODO: Make this logic more robust (and less hacky).
         #       Generally works for MDF purposes; will explode on complex JSONSchemas.
         if field.endswith("type") and (include_containers
@@ -1254,14 +1254,12 @@ def prettify_json(root, **kwargs):
         yield "{}{}{}".format(indent*_nest_level, bullet, root)
 
 
-def translate_json(source_doc, mapping, na_values=None):
+def translate_json(source_doc, mapping, na_values=None, require_all=False):
     """Translate a JSON document (as a dictionary) from one schema to another.
 
-    Warning:
-            This tool is unable to handle translation involving data inside lists/arrays.
-            If a list/array must be read for the translation, it will be ignored.
-            (Ex. ``"some_array.0.my_field"`` where 0 is an index, is not supported.)
-            However, lists/arrays as values are supported.
+    Note:
+        Only JSON documents (and therefore datatypes permitted in JSON documents)
+        are supported by this tool.
 
     Arguments:
         source_doc (dict): The source JSON document to translate.
@@ -1280,6 +1278,10 @@ def translate_json(source_doc, mapping, na_values=None):
         na_values (list): Values to treat as N/A (not applicable/available).
                 N/A values will be ignored and not copied.
                 **Default:** ``None`` (no N/A values).
+        require_all (bool): Must every value in the mapping be found? **Default:** ``False``.
+                It is advised to leave this false unless the translated document depends
+                on every key's value being present. Even so, it is advised to use
+                JSONSchema validation instead.
 
     Returns:
         dict: The translated JSON document.
@@ -1289,18 +1291,19 @@ def translate_json(source_doc, mapping, na_values=None):
     elif not isinstance(na_values, list):
         na_values = [na_values]
 
-    # Get (path, value) pairs from the key structure
-    # Loop over each
+    # Flatten source_doc - will match keys easier
+    flat_source = flatten_json(source_doc)
+    # For each (dest, source) pair, attempt to fetch source's value to add to dest
     dest_doc = {}
-    for dest_path, source_path in flatten_dict(mapping).items():
+    for dest_path, source_path in flatten_json(mapping).items():
         try:
-            # Get the value in the data pointed to by the source_path
-            # Raises KeyError if value not found
-            value = source_doc
-            for field in source_path.split("."):
-                value = value[field]
-            # Check that value is valid to translate
-            if value not in na_values:
+            value = flat_source[source_path]
+            # Check that the value is valid to translate, including contained values
+            if isinstance(value, list):
+                while any([na in value for na in na_values]):
+                    [value.remove(na) for na in na_values if na in value]
+            if value not in na_values and value != []:
+                # Determine path to add
                 fields = dest_path.split(".")
                 last_field = fields.pop()
                 current_field = dest_doc
@@ -1311,27 +1314,38 @@ def translate_json(source_doc, mapping, na_values=None):
                     current_field = current_field[field]
                 # Add value to end
                 current_field[last_field] = value
-        # KeyError just means not found; don't process, don't panic
-        except KeyError:
-            pass
 
+        # KeyError indicates missing value - only panic if no missing values are allowed
+        except KeyError as e:
+            if require_all:
+                raise KeyError("Required key '{}' not found during translation of JSON "
+                               "document:\n{}".format(source_path, source_doc)) from e
     return dest_doc
 
 
-def flatten_dict(unflat_dict):
-    """Flatten a dictionary into dot notation, where nested dicts are represented with a period.
-
-    Caution:
-            This tool does not flatten lists. Lists are treated as though they are
-            already fully flattened, i.e. they are already leaf nodes in the dict tree.
+def flatten_json(unflat_json, flatten_lists=True):
+    """Flatten a JSON document into dot notation, where nested dicts are represented with a period.
 
     Arguments:
-        unflat_dict (dict): The dictionary to flatten.
+        unflat_json (dict): The JSON to flatten.
+        flatten_lists (bool): Should the lists be flattened? **Default:** ``True``.
+                Lists are flattened by merging contained dictionaries,
+                and flattening those. Terminal values (non-container types)
+                are added to a list and set at the terminal value for the path.
+                When this is ``False``, lists are treated as terminal values and not flattened.
 
     Returns:
-        dict: The dictionary, flattened into dot notation.
+        dict: The JSON, flattened into dot notation in a dictionary.
+                If a non-container value was supplied to flatten (e.g. a string)
+                the value will be returned unchanged instead.
 
-    Example::
+    Warning:
+        Mixing container and non-container types in a list is not recommended.
+        (e.g. [{"key": "val"}, "other_val"])
+        If a list mixes types in this way, the non-container values MAY be listed
+        under the field "flatten_undefined".
+
+    Examples::
 
         {
             "key1": {
@@ -1342,13 +1356,94 @@ def flatten_dict(unflat_dict):
         {
             "key1.key2": value
         }
+
+
+        {
+            "key1": {
+                "key2": [{
+                    "key3": "foo",
+                    "key4": "bar"
+                }, {
+                    "key3": "baz"
+                }]
+            }
+        }
+        with flatten_lists=True, turns into
+        {
+            "key1.key2.key3": ["foo", "baz"],
+            "key1.key2.key4": "bar"
+        }
     """
-    flat_dict = {}
-    for key, val in unflat_dict.items():
-        if isinstance(val, dict):
-            flat_subdict = flatten_dict(val)
-            for subkey, subval in flat_subdict.items():
-                flat_dict[key+"."+subkey] = subval
+    flat_json = {}
+    # Dict flattens by keys
+    if isinstance(unflat_json, dict):
+        for key, val in unflat_json.items():
+            flat_val = flatten_json(val, flatten_lists=flatten_lists)
+            # flat_val is dict to add to flat_json
+            if isinstance(flat_val, dict):
+                for subkey, subval in flat_val.items():
+                    if subkey != "flatten_undefined":
+                        flat_json[key+"."+subkey] = subval
+                    # "flatten_unknown" is from mixed-type lists (container and non-container)
+                    # Attempt to fix. This is not guaranteed; recommend not mixing types
+                    else:
+                        flat_json[key] = subval
+            # flat_val is a terminal value (anything besides dict)
+            else:
+                flat_json[key] = flat_val
+
+    # List flattens by values inside
+    elif flatten_lists and isinstance(unflat_json, list):
+        # Dict of flat keys processed so far
+        partial_flats = {}
+        # List of terminal values
+        terminals = []
+        for val in unflat_json:
+            flat_val = flatten_json(val, flatten_lists=flatten_lists)
+            # flat_val is dict, need to appropriately merge
+            if isinstance(flat_val, dict):
+                for subkey, subval in flat_val.items():
+                    # If subkey is duplicate, add values to list
+                    if subkey in partial_flats.keys():
+                        # Create list if not already
+                        if type(partial_flats[subkey]) is not list:
+                            partial_flats[subkey] = [partial_flats[subkey], subval]
+                        else:
+                            partial_flats[subkey].append(subval)
+                    # If subkey not duplicate, just add
+                    else:
+                        partial_flats[subkey] = subval
+            # flat_val is a terminal value (anything besides dict)
+            # Lists should be merged into terminals
+            elif isinstance(flat_val, list):
+                terminals.extend(flat_val)
+            # Non-containers just appended to terminals
+            else:
+                terminals.append(flat_val)
+
+        # Clean up for returning
+        # If only one of partial_flats and terminals is populated, return that,
+        # but if neither are flattened return an empty dict (partial_flats)
+        # partial_flats is all contained dicts, flattened
+        if not terminals:
+            flat_json = partial_flats
+        # terminals is all contained terminal values (flat by definition)
+        elif terminals and not partial_flats:
+            # If only one value in terminals, just return it
+            if len(terminals) == 1:
+                terminals = terminals[0]
+            flat_json = terminals
+        # Otherwise, add in sentinel field "flatten_undefined"
+        # This case only occurs when a non-container type is mixed with a container type
+        # in a list (e.g. [{"key": "val"}, "other_val"]) and is removed at an earlier
+        # recursion depth if possible
         else:
-            flat_dict[key] = val
-    return flat_dict
+            if len(terminals) == 1:
+                terminals = terminals[0]
+            partial_flats["flatten_undefined"] = terminals
+            flat_json = partial_flats
+
+    # Not container; cannot flatten
+    else:
+        flat_json = unflat_json
+    return flat_json
