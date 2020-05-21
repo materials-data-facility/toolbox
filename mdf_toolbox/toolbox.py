@@ -521,7 +521,7 @@ def globus_check_directory(transfer_client, endpoint, path, allow_missing=False)
     try:
         transfer_client.operation_ls(endpoint, path=path)
         is_dir = True
-    except globus_sdk.exc.TransferAPIError as e:
+    except globus_sdk.TransferAPIError as e:
         # If error indicates path exists but is not dir, is not dir
         if e.code == "ExternalError.DirListingFailed.NotDirectory":
             is_dir = False
@@ -559,7 +559,7 @@ def globus_check_directory(transfer_client, endpoint, path, allow_missing=False)
                         exists = True
                         error = ("Path '{}' leads to a '{}', not a file or directory"
                                  .format(path, item_type))
-            except globus_sdk.exc.TransferAPIError as e:
+            except globus_sdk.TransferAPIError as e:
                 # Size limit means we can't figure out this path
                 if e.code == "ExternalError.DirListingFailed.SizeLimit":
                     error = ("Unable to check type of path '{}': Parent directory too large"
