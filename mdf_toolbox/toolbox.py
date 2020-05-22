@@ -782,7 +782,7 @@ def get_local_ep(*args, **kwargs):
         warnings.warn("'get_local_ep()' has been deprecated in favor of "
                       "'globus_sdk.LocalGlobusConnectPersonal().endpoint_id'.")
     return globus_sdk.LocalGlobusConnectPersonal().endpoint_id
-    
+
 
 def posixify_path(path: str) -> str:
     """Ensure that a path is ready for use with Globus
@@ -797,13 +797,11 @@ def posixify_path(path: str) -> str:
     Returns:
         (str) Rectified path
     """
-
     is_windows = re.match('[A-Z]:\\\\', path) is not None
     if is_windows:
         ppath = PureWindowsPath(path)
         return '/{0}{1}'.format(ppath.drive[:1].lower(), ppath.as_posix()[2:])
     return path  # Nothing to do for POSIX paths
-
 
 
 # *************************************************
