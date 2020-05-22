@@ -3,6 +3,8 @@ from copy import deepcopy
 from datetime import datetime
 import json
 import os
+from pathlib import PureWindowsPath
+import re
 import shutil
 import time
 
@@ -521,7 +523,7 @@ def globus_check_directory(transfer_client, endpoint, path, allow_missing=False)
     try:
         transfer_client.operation_ls(endpoint, path=path)
         is_dir = True
-    except globus_sdk.exc.TransferAPIError as e:
+    except globus_sdk.TransferAPIError as e:
         # If error indicates path exists but is not dir, is not dir
         if e.code == "ExternalError.DirListingFailed.NotDirectory":
             is_dir = False
@@ -559,7 +561,7 @@ def globus_check_directory(transfer_client, endpoint, path, allow_missing=False)
                         exists = True
                         error = ("Path '{}' leads to a '{}', not a file or directory"
                                  .format(path, item_type))
-            except globus_sdk.exc.TransferAPIError as e:
+            except globus_sdk.TransferAPIError as e:
                 # Size limit means we can't figure out this path
                 if e.code == "ExternalError.DirListingFailed.SizeLimit":
                     error = ("Unable to check type of path '{}': Parent directory too large"
@@ -616,6 +618,10 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list, interval=DEF
                 ``False``: Cancel the Transfer
                 **Default**: ``True``
     """
+    # Ensure paths are POSIX
+    for i, path in enumerate(path_list):
+        path_list[i] = (posixify_path(path[0]), posixify_path(path[1]))
+
     # TODO: (LW) Handle transfers with huge number of files
     # If a TransferData object is too large, Globus might timeout
     #   before it can be completely uploaded.
@@ -776,6 +782,26 @@ def get_local_ep(*args, **kwargs):
         warnings.warn("'get_local_ep()' has been deprecated in favor of "
                       "'globus_sdk.LocalGlobusConnectPersonal().endpoint_id'.")
     return globus_sdk.LocalGlobusConnectPersonal().endpoint_id
+
+
+def posixify_path(path: str) -> str:
+    """Ensure that a path is ready for use with Globus
+    by converting it to POSIX format.
+
+    Windows paths are converted to POSIX style,
+    where the "Drive" is listed as the
+    first folder (e.g., ``/c/Users/globus_user/``).
+
+    Args:
+        path (str): Input path
+    Returns:
+        (str) Rectified path
+    """
+    is_windows = re.match('[A-Z]:\\\\', path) is not None
+    if is_windows:
+        ppath = PureWindowsPath(path)
+        return '/{0}{1}'.format(ppath.drive[:1].lower(), ppath.as_posix()[2:])
+    return path  # Nothing to do for POSIX paths
 
 
 # *************************************************
