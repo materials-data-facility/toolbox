@@ -569,3 +569,8 @@ def test_flatten_json():
         "key9": "value3"
     }
     assert mdf_toolbox.flatten_json(unflat_dict) == flat_dict
+
+
+def test_posixify():
+    assert mdf_toolbox.posixify_path('C:\\Users\\') == '/c/Users'
+    assert mdf_toolbox.posixify_path('/users/test') == '/users/test'
