@@ -12,6 +12,8 @@ import globus_sdk
 from globus_sdk.response import GlobusHTTPResponse
 import jsonschema
 
+from .utils import rectify_path
+
 
 KNOWN_SCOPES = {
     "transfer": "urn:globus:auth:scope:transfer.api.globus.org:all",
@@ -616,6 +618,10 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list, interval=DEF
                 ``False``: Cancel the Transfer
                 **Default**: ``True``
     """
+    # Ensure paths are POSIX
+    for i, path in enumerate(path_list):
+        path_list[i] = (rectify_path(path[0]), rectify_path(path[1]))
+
     # TODO: (LW) Handle transfers with huge number of files
     # If a TransferData object is too large, Globus might timeout
     #   before it can be completely uploaded.
