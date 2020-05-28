@@ -3,6 +3,7 @@ import warnings
 
 import globus_sdk
 
+# Importing whole package for portability - this module can be copied directly somewhere else
 import mdf_toolbox
 
 
