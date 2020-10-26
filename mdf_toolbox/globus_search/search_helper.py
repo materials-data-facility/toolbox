@@ -424,7 +424,7 @@ class SearchHelper():
             dict: The full mapping for the index.
         """
         return (self.__search_client.get(
-                    "/unstable/index/{}/mapping".format(mdf_toolbox.translate_index(self.index)))
+                    "/beta/index/{}/mapping".format(mdf_toolbox.translate_index(self.index)))
                 ["mappings"])
 
     # ************************************************************************************
