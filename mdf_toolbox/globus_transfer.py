@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 import os
 import time
@@ -108,7 +109,7 @@ def custom_transfer(transfer_client, source_ep, dest_ep, path_list, interval=DEF
             #   only the last (chronologically) error will be processed
             if event["is_error"] and event["time"] not in error_timestamps:
                 error_timestamps.add(event["time"])
-                ret_event = event.data
+                ret_event = deepcopy(event.data)
                 # yield value should always have success: bool
                 ret_event["success"] = False
                 ret_event["finished"] = False
