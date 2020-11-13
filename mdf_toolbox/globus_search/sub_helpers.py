@@ -1,6 +1,6 @@
 import warnings
 
-from mdf_toolbox.search_helper import SearchHelper, SEARCH_LIMIT
+from .search_helper import SearchHelper, SEARCH_LIMIT
 
 
 class AggregateHelper(SearchHelper):

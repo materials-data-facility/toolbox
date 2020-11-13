@@ -5,8 +5,8 @@ from globus_sdk import SearchAPIError
 import pytest
 
 import mdf_toolbox
-from mdf_toolbox.search_helper import (SearchHelper, _validate_query,
-                                       BLANK_QUERY, SEARCH_LIMIT)
+from mdf_toolbox.globus_search.search_helper import (SearchHelper, _validate_query,
+                                                     BLANK_QUERY, SEARCH_LIMIT)
 
 # Manually logging in for SearchHelper testing
 SEARCH_CLIENT = mdf_toolbox.login(services=["search"], app_name="SearchHelper",
