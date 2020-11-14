@@ -10,7 +10,7 @@ version = version_ns['__version__']
 setup(
     name='mdf_toolbox',
     version=version,
-    packages=['mdf_toolbox'],
+    packages=['mdf_toolbox', 'mdf_toolbox.globus_search'],
     description='Materials Data Facility Python utilities',
     long_description=("Toolbox is the Materials Data Facility Python package"
                       " containing utility functions and other tools."),
