@@ -1,6 +1,6 @@
 import warnings
 
-from .search_helper import SearchHelper, SEARCH_LIMIT
+from mdf_toolbox.globus_search.search_helper import SearchHelper, SEARCH_LIMIT
 
 
 class AggregateHelper(SearchHelper):

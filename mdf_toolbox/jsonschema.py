@@ -3,7 +3,7 @@ import os
 
 import jsonschema
 
-from .json_dict import dict_merge, flatten_json
+from mdf_toolbox.json_dict import dict_merge, flatten_json
 
 
 # *************************************************
