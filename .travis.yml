@@ -15,7 +15,7 @@ env:
 script:
 - flake8 . && travis_wait 50 py.test
 before_install:
-- openssl aes-256-cbc -K $encrypted_ad73325f33e8_key -iv $encrypted_ad73325f33e8_iv
+- openssl aes-256-cbc -K $encrypted_a7c8f759f73f_key -iv $encrypted_a7c8f759f73f_iv
   -in travis.tar.enc -out travis.tar -d
 - tar xvf travis.tar
 - mv .globus-native-apps.cfg ~/.globus-native-apps.cfg
@@ -25,7 +25,7 @@ after_success:
 notifications:
   email:
     recipients:
-    - jgaff@uchicago.edu
+    - blaiszik@uchicago.edu
     on_success: never
     on_failure: always
   slack:
@@ -35,9 +35,9 @@ notifications:
       secure: PeTw4hgPe/UvQXjmYD7tT+4J1tOZKOHw5sLYegSZtnekKeLpjLZib0eZrAkzE5LFbRoRgXZ9z4Yn+hN3az4Z1GodXYcRrYrvRwe75oZMgxe5TvXpmE1lqv8nCvbDo2LJbkVTdn0fKRRfEl1W62RtYcyh+QwunUudHA9U2zOZLqSt4BeYMTOK4T5XyhZ5T1DYSBO8Dj28OFuemjwGkBMgZ5Z/+GqIJ1wZw2sKHKN+vkKj8NChPEzok+GX0R1CXgqvMMHPNJUx/69hZMuqxZciQICqhAstUw//ssTI6bzGHivbhObE5nlDqmBIPDD8tEG6p/XOOFtHx2a/R6KV+5wjzIs6sLiEz2QAG/qKm20jSHi8j585RqjgpBGC1g0FQ8k75E0oF8ls5unHFnDHPRWnPI0ifZ2qgYIUWdHC6dV4QF06Z1OYRHfOiyiLvuWIlKufKRM6aC84LEXxBS7Lq4MUZ+wKjGVf5EmSeJzYC+NXnBcnkFOx3KnImNDP9JuBwsgrFYRZhpvlwKdmCn1sw+iAuhco+nTKrzq5fK4vglE4zAMr81YgnLrVY3xJrz0G4wbQYvtxcFx84GaV6UiL1hfbuu4aBw3o6kuq5gxEaYg18MvsIZyIbQOpNuqRtQsHknRJSoLPvIEv8Rq6zA2twHI1MJXunjzsc0WaCm2Npt1ZpGk=
 deploy:
   provider: pypi
-  user: jgaff
+  user: __token__
   on:
     tags: true
   distributions: sdist bdist_wheel
   password:
-    secure: 0McTh28SgeOa0CO2Rhj4JC6VEtl49zpotlzFJq2ZMyuDchztuRQYGU8v2qlmvspBzEHs0++xYeeUgemcs/5ppp24K5KyF66dgCbqhEJ1hPM/r+xLuGb5okAAVN+w7TLl11aSHyQvwAKR7FAEKM7AdF+zkecieZZHXsuQpaV0wuSn3z5Jq2S4WTFddAUhiJdzYMjTpVWR/ccO1DzlynaOM92Ae3MHbXV4hXROxQUseUNRdE8UPS6EBEgcbELQmHAF3GrzEW6nfv9jMPbtBx2GyfsMBgtayYy0D4yL69L+1N4NjgE/sc1t6DYWNJyjQEAIgSsI+1KUh4DFnORBjouOwep2IUfgvE27h6z/VFpS9eIlVn97LyOKHDH7qSmHwvoHhYB5iulQ9KG7IzD5X92n2LT9Zgor6zrWxPSrYgPdoCGydv2wAvT3obB9jih1C5pGL0+6BqaucmSK/KyOr1wEoFRpPAcq94T2bynfdrTpkOBkaW3MfIwJYNCVYTqUvFQvDqCfT9M50XyT9p2AxSrh7EYXgXG6CRJylM2yu0zgCuISKOiERLV0gjI6KUeySZsbIgtxUDMQHJ9vaP2IaokZTZkRqSU3l9hWNpJrONBWVlTzT9uUoWQdgNEoTN4W1ZhjXUy/5Gd0m/joLCWkVCyw11xSF0fnTpOgQjKaUjh+K7Q=
+    secure: tuNKyBhjlug42Pn8zpznej3pnOyA6LrLvnbr9KM3RKbZMd+0jK4wPrC/kxllncEMVnBzDL1qdtKkw+akcN+W/PPHg7dRrdnLPlFjEiwW1AJGX9e3QQ7xa7ujJlogxl48qsRDHHxvQUN/6L74yTuYA+vRzMgVpoSmdX3EMwYItVTKADJ0g6Cfq3PHY9wkukODFkYJIOs8iFXhB+wQNDGIu5fPzdVlK/7KLqBWunFTn8b3czWIOWIq5UiX1GMmHeMaptv3Zqcr1Gdp7ey+VHRPlL47wnc++wXkzxjcIlp3oDoWCOTFcwPn/xRCztfgY1S8CgCexV63nt5vfq5efbAJ2ilghC2+AE2FX2gO5YiCXOyhh8MLAs5j1z2jcJJ04iKIATmBaKixK6HFGHwTnzxyvtOb7Q2xeijF4Ax+kRyqtbhSlLezeb0mhCp8E1oxFVCd0700/82N1XpITJhAJ+OBZU/5eLIC2S+31mCKKStOUAZA7GFXpfsExwvv1a5jfvjWatkJG5M9ZfIJbx6VvpD5nXlDAf9TYyyw5gEYKrof6QDMUveMIvvScD4C1xp/3jVQmv7iPaz/Ko7JURykGI1VryzGw3j6oBA8ErKz4Bgex5viJiXT3FvjfR0MCp/dZcQpaHgsacvsdOnvvGpvmjew/rD5wAM2aqea/I1as3LZaOA=
