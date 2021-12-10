@@ -15,10 +15,10 @@ setup(
     long_description=("Toolbox is the Materials Data Facility Python package"
                       " containing utility functions and other tools."),
     install_requires=[
-        "fair-research-login>=0.1.5",
-        "globus_nexus_client>=0.2.8",
-        "globus-sdk>=1.7.0",
-        "requests>=2.18.4"
+        "fair-research-login>=0.2.4",
+        "globus_nexus_client>=0.4.1",
+        "globus-sdk>=3.1.0",
+        "requests>=2.26.0"
     ],
     python_requires=">=3.6",
     classifiers=[

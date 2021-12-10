@@ -53,7 +53,7 @@ def anonymous_login(services):
     # Initialize valid services
     for serv in services:
         try:
-            clients[serv] = KNOWN_CLIENTS[serv](http_timeout=STD_TIMEOUT)
+            clients[serv] = KNOWN_CLIENTS[serv]()
         except KeyError:  # No known client
             print("Error: No known client for '{}' service.".format(serv))
         except Exception:  # Other issue, probably auth
@@ -117,7 +117,7 @@ def confidential_login(services, client_id, client_secret, make_clients=True):
 
         # User wants clients and client supported
         if make_clients and scope in KNOWN_CLIENTS.keys():
-            returnables[key] = KNOWN_CLIENTS[scope](authorizer=auth, http_timeout=STD_TIMEOUT)
+            returnables[key] = KNOWN_CLIENTS[scope](authorizer=auth)
         # Returning authorizer only
         else:
             returnables[key] = auth
@@ -203,7 +203,7 @@ def login(services, make_clients=True, clear_old_tokens=False, **kwargs):
 
         # User wants clients and client supported
         if make_clients and scope in KNOWN_CLIENTS.keys():
-            returnables[key] = KNOWN_CLIENTS[scope](authorizer=auth, http_timeout=STD_TIMEOUT)
+            returnables[key] = KNOWN_CLIENTS[scope](authorizer=auth)
         # Returning authorizer only
         else:
             returnables[key] = auth
