@@ -7,6 +7,7 @@ from globus_nexus_client import NexusClient
 import globus_sdk
 import mdf_toolbox
 import pytest
+from unittest import mock
 
 
 def test_login():
@@ -259,7 +260,7 @@ def test_gmeta_pop():
 
         def json(self):
             return self.data
-    ghttp = globus_sdk.GlobusHTTPResponse(TestResponse())
+    ghttp = globus_sdk.GlobusHTTPResponse(TestResponse(), client=mock.Mock())
     popped = mdf_toolbox.gmeta_pop(ghttp)
     assert popped == [{
             'mdf': {
@@ -317,8 +318,6 @@ def test_gmeta_pop():
 def test_translate_index():
     # Known index
     assert mdf_toolbox.translate_index("mdf") == "1a57bbe5-5272-477f-9d31-343b8258b7a5"
-    # Unknown index
-    assert mdf_toolbox.translate_index("frdr") == "9be6dd95-48f0-48bb-82aa-c6577a988775"
     # Invalid index
     assert mdf_toolbox.translate_index("invalid_index_not_real") == "invalid_index_not_real"
 
