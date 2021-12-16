@@ -18,7 +18,8 @@ setup(
         "fair-research-login>=0.2.4",
         "globus_nexus_client>=0.4.1",
         "globus-sdk>=3.1.0",
-        "requests>=2.26.0"
+        "requests>=2.26.0",
+        "jsonschema<=4.3.0"
     ],
     python_requires=">=3.6",
     classifiers=[
