@@ -6,4 +6,7 @@ nbsphinx>=0.4.1
 pytest>=3.4.1
 pytest-cov>=2.5.1
 sphinx_bootstrap_theme>=0.6.5
-unittest
+fair-research-login>=0.2.4
+globus_nexus_client>=0.4.1
+globus-sdk>=3.1.0
+requests>=2.26.0
