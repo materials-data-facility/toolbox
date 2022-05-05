@@ -9,9 +9,7 @@ import mdf_toolbox
 import pytest
 from unittest import mock
 
-
-on_github = os.getenv('GITHUB_ACTIONS') is not None
-on_github = True
+on_github = os.getenv('ON_GITHUB') is not None
 
 def test_login():
     if on_github: return True

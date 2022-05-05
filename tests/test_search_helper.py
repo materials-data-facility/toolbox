@@ -13,7 +13,7 @@ SEARCH_LIMIT = 10
 #github specific declarations
 client_id = os.getenv('CLIENT_ID')
 client_secret = os.getenv('CLIENT_SECRET')
-on_github = os.getenv('GITHUB_ACTIONS') is not None
+on_github = os.getenv('ON_GITHUB') is not None
 
 auths = mdf_toolbox.confidential_login(client_id=client_id,
                                         client_secret=client_secret,
