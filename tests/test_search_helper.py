@@ -89,10 +89,10 @@ def test_init():
     assert q2._SearchHelper__query["advanced"] is True
     assert q2.initialized is True
 
-    # Test without explicit SearchClient
-    q3 = SearchHelper(INDEX)
-    assert q3._SearchHelper__query["advanced"] is False
-    assert q3.initialized is False
+#     # Test without explicit SearchClient
+#     q3 = SearchHelper(INDEX)
+#     assert q3._SearchHelper__query["advanced"] is False
+#     assert q3.initialized is False
 
 
 # def test_term():
