@@ -8,6 +8,14 @@ import mdf_toolbox
 from mdf_toolbox.globus_search.search_helper import (SearchHelper, _validate_query,
                                                      BLANK_QUERY, SEARCH_LIMIT)
 
+#github specific declarations
+client_id = os.getenv('CLIENT_ID')
+client_secret = os.getenv('CLIENT_SECRET')
+
+search_auth = mdf_toolbox.confidential_login(client_id=client_id,
+                                        client_secret=client_secret,
+                                        services=['search'], make_clients=True)
+
 # Manually logging in for SearchHelper testing
 SEARCH_CLIENT = mdf_toolbox.login(services=["search"], app_name="SearchHelper",
                                   client_id="878721f5-6b92-411e-beac-830672c0f69a")["search"]
