@@ -33,6 +33,7 @@ jobs:
           pip install pytest
           pip install jsonschema
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f test_requirements.txt ]; then pip install -r test_requirements.txt; fi
       - name: Test with pytest
         run: |
           pytest -s tests/test_search_helper.py 
