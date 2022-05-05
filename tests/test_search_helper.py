@@ -34,8 +34,6 @@ INDEX = "mdf"
 # * Static functions
 # ***********************************************
 
-_clean_query_string() effectively tested in test_clean_query()
-
 def test_validate_query():
     # Error on no query
     with pytest.raises(ValueError):
@@ -57,7 +55,7 @@ def test_validate_query():
     query2 = deepcopy(BLANK_QUERY)
     # q and limit get corrected
     query2["q"] = "(mdf.source_name:oqmd("
-    query2["limit"] = 20000
+    query2["limit"] = SEARCH_LIMIT
     # None for offset is invalid normally, but should not be removed
     # because it is not the default value - the user has set it
     query2["offset"] = None
