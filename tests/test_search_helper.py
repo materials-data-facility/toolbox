@@ -1,5 +1,5 @@
 from copy import deepcopy
-import re
+import re, os
 
 from globus_sdk import SearchAPIError
 import pytest
