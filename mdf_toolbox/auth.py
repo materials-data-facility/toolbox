@@ -13,7 +13,7 @@ KNOWN_SCOPES = {
     "search_ingest": "urn:globus:auth:scope:search.api.globus.org:all",
     "data_mdf": "urn:globus:auth:scope:data.materialsdatafacility.org:all",
     "mdf_connect_dev": "https://auth.globus.org/scopes/0e0a9538-ce45-43c1-998a-d3a7031a83f0/connect",
-    "mdf_connect": "https://auth.globus.org/scopes/c17f27bb-f200-486a-b785-2a25e82af505/connect",
+    "mdf_connect": "https://auth.globus.org/scopes/4d5f8e8b-a61d-40d8-bb58-5a3f5d1d200a/connect",
     "petrel": "https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
     "groups": "urn:globus:auth:scope:nexus.api.globus.org:groups",
     "dlhub": "https://auth.globus.org/scopes/81fc4156-a623-47f2-93ad-7184118226ba/auth",
