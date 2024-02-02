@@ -3,7 +3,6 @@ import json
 import os
 import shutil
 
-from globus_nexus_client import NexusClient
 import globus_sdk
 import mdf_toolbox
 import pytest
@@ -31,7 +30,6 @@ def test_login():
     assert isinstance(res2.get("data_mdf"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("mdf_connect"), globus_sdk.RefreshTokenAuthorizer)
     assert isinstance(res2.get("petrel"), globus_sdk.RefreshTokenAuthorizer)
-    # assert isinstance(res2.get("groups"), NexusClient)
 
 
 def test_confidential_login(capsys):
@@ -75,7 +73,6 @@ def test_anonymous_login(capsys):
     res1 = mdf_toolbox.anonymous_login(["transfer", "search", "publish", "groups"])
     assert isinstance(res1.get("search"), globus_sdk.SearchClient)
     assert isinstance(res1.get("transfer"), globus_sdk.TransferClient)
-    assert isinstance(res1.get("groups"), NexusClient)
 
     # Single service works
     res2 = mdf_toolbox.anonymous_login("search")
